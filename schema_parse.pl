@@ -41,6 +41,13 @@ use strict;
 use warnings;
 
 
+# Constants
+my $numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
+my $keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
+my $nameoid = "(?:$numoid|$keystring)";
+
+
+# State
 my $unwrap_state = undef;
 my $unwrap_state_line = 0;
 my $unwrap_curr_line = 0;
@@ -96,11 +103,126 @@ sub unwrap
 	}
 
 
+sub ParseOid
+	{
+	my $oidstr = shift;
+	my $rest;
+
+	if ($oidstr =~ /^\s*($nameoid)(\s.*$|$)/)
+		{
+		return ($2, $1);
+		}
+
+	return undef;
+	}
+
+
+sub ParseOids
+	{
+	my $oidstr = shift;
+
+	my @oids = ();
+	my $rest;
+
+	if ($oidstr =~ /^\s*\(\s*($nameoid(?:\s*\$\s*$nameoid)*)\s*\)(\s.*$|$)/)
+		{
+		my $oids = $1;
+		$rest = $2;
+
+		$oids =~ s/\$/ /g;
+
+		while ($oids !~ /^\s*$/)
+			{
+			my $oid;
+			($oid, $oids) = $oids =~ /^\s*(\S+)(\s.*$|$)/;
+			push @oids, $oid;
+			}
+		}
+	elsif ($oidstr =~ /\s*($nameoid)(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @oids, $1;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@oids);
+	}
+
+
+sub ParseQdescrs
+	{
+	my $qdescrstr = shift;
+
+	my @qdescrs = ();
+	my $rest;
+
+	if ($qdescrstr =~ /^\s*\(\s*('[A-Za-z][A-Za-z0-9-]*'(\s+'[A-Za-z][A-Za-z0-9-]*')*)\s*\)(\s.*$|$)/)
+		{
+		my $descr;
+		my $qdescrlist = $1;
+		$rest = $3;
+
+		while ($qdescrlist !~ /^\s*$/)
+			{
+			($descr, $qdescrlist) = $qdescrlist =~ /^\s*'([^']+)'(.*$)/;
+			push @qdescrs, $descr;
+			}
+		}
+	elsif ($qdescrstr =~ /^\s*'([A-Za-z][A-Za-z0-9-]*)'(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @qdescrs, $1;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@qdescrs);
+	}
+
+
+sub ParseQdstrings
+	{
+	my $qdstringsstr = shift;
+
+	my @qdstrings = ();
+	my $rest;
+
+	if ($qdstringsstr =~ /^\s*\(\s*('(\\27|\\5c|\\5C|[^'\\])+'(\s+'(\\27|\\5c|\\5C|[^'\\])+')*)\s*\)(\s.*$|$)/)
+		{
+		my $dstring;
+		my $qdstringlist = $1;
+		$rest = $5;
+
+		while ($qdstringlist !~ /^\s*$/)
+			{
+			($dstring, undef, $qdstringlist) = $qdstringlist =~ /^\s*'((\\27|\\5c|\\5C|[^'\\])+)'(.*$)/;
+			push @qdstrings, $dstring;
+			}
+		}
+	elsif ($qdstringsstr =~ /^\s*'(\\27|\\5c|\\5C|[^'\\])+'(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @qdstrings, $1;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@qdstrings);
+	}
+
+
 sub ParseAttribute
 	{
 	my ($item, $file, $line, $aref) = @_;
 
-	my ($oid, $body) = $item =~ /^attributetypes:\s*\(\s*(\S+)((\s+.*)?)\)\s*$/i;
+	my ($oid, $body) = $item =~ /^attributetypes:\s*\(\s*($nameoid)((\s+.*)?)\)\s*$/i;
 
 	my $attr = {
 		'OID'		=> $oid,
@@ -118,26 +240,12 @@ sub ParseAttribute
 	while ($body !~ /^\s*$/)
 		{
 		my ($key, $rest) = $body =~ /^\s*(\S+)(\s.*$|$)/;
-		if ($key eq 'NAME')
+
+		if ($key eq 'NAME' && scalar(ParseQdescrs($rest)))
 			{
-			my @names = ();
-			if ($rest =~ /^\s*\(/)
-				{
-				my $names;
-				($names, $rest) = $rest =~ /^\s*\(([^)]*)\)(.*)$/;
-				while ($names !~ /^\s*$/)
-					{
-					my $name;
-					($name, $names) = $names =~ /^\s*'([^']*)'(.*)$/;
-					push @{$attr->{'NAME'}}, $name;
-					}
-				}
-			else
-				{
-				my $name;
-				($name, $rest) = $rest =~ /^\s*'([^']*)'(.*)$/;
-				push @{$attr->{'NAME'}}, $name;
-				}
+			my $namesref;
+			($rest, $namesref) = ParseQdescrs($rest);
+			$attr->{'NAME'} = $namesref;
 			}
 		elsif ($key eq 'DESC')
 			{
@@ -149,29 +257,23 @@ sub ParseAttribute
 			{
 			$attr->{'OBSOLETE'} = 1;
 			}
-		elsif ($key eq 'SUP')
+		elsif ($key eq 'SUP' && scalar(ParseOid($rest)))
 			{
 			my $sup;
-			($sup, $rest) = $rest =~ /^\s*(\S+)(\s.*$|$)/;
+			($rest, $sup) = ParseOid($rest);
 			$attr->{'SUP'} = [$sup];
 			}
-		elsif ($key eq 'EQUALITY')
+		elsif ($key eq 'EQUALITY' && scalar(ParseOid($rest)))
 			{
-			my $equality;
-			($equality, $rest) = $rest =~ /^\s*(\S+)(\s.*$|$)/;
-			$attr->{'EQUALITY'} = $equality;
+			($rest, $attr->{'EQUALITY'}) = ParseOid($rest);
 			}
-		elsif ($key eq 'ORDERING')
+		elsif ($key eq 'ORDERING' && scalar(ParseOid($rest)))
 			{
-			my $ordering;
-			($ordering, $rest) = $rest =~ /^\s*(\S+)(\s.*$|$)/;
-			$attr->{'ORDERING'} = $ordering;
+			($rest, $attr->{'ORDERING'}) = ParseOid($rest);
 			}
-		elsif ($key eq 'SUBSTR')
+		elsif ($key eq 'SUBSTR' && scalar(ParseOid($rest)))
 			{
-			my $substr;
-			($substr, $rest) = $rest =~ /^\s*(\S+)(\s.*$|$)/;
-			$attr->{'SUBSTR'} = $substr;
+			($rest, $attr->{'SUBSTR'}) = ParseOid($rest);
 			}
 		elsif ($key eq 'SYNTAX')
 			{
@@ -197,11 +299,11 @@ sub ParseAttribute
 			($usage, $rest) = $rest =~ /^\s*(\S+)(\s.*$|$)/;
 			$attr->{'USAGE'} = $usage;
 			}
-		elsif ($key =~ /^X-/)
+		elsif ($key =~ /^X-/ && scalar(ParseQdstrings($rest)))
 			{
-			my $val;
-			($val, $rest) = $rest =~ /^\s*'([^']*)'(.*)$/;
-			$attr->{'X-'}->{$key} = $val;
+			my $extsref;
+			($rest, $extsref) = ParseQdstrings($rest);
+			$attr->{'X-'}->{$key} = $extsref;
 			}
 		else
 			{
@@ -216,42 +318,11 @@ sub ParseAttribute
 	}
 
 
-sub ParseOids
-	{
-	my $oidstr = shift;
-
-	my @oids = ();
-	my $rest;
-
-	if ($oidstr =~ /^\s*\(/)
-		{
-		my $oids;
-		($oids, $rest) = $oidstr =~ /^\s*\(([^)]*)\)(.*)$/;
-		$oids =~ s/\$/ /g;
-
-		while ($oids !~ /^\s*$/)
-			{
-			my $oid;
-			($oid, $oids) = $oids =~ /^\s*(\S+)(\s.*$|$)/;
-			push @oids, $oid;
-			}
-		}
-	else
-		{
-		my $oid;
-		($oid, $rest) = $oidstr =~ /^\s*(\S+)(\s.*$|$)/;
-		push @oids, $oid;
-		}
-
-	return ($rest, \@oids);
-	}
-
-
 sub ParseObjectClass
 	{
 	my ($item, $file, $line, $aref) = @_;
 
-	my ($oid, $body) = $item =~ /^objectclasses:\s*\(\s*(\S+)((\s+.*)?)\)\s*$/i;
+	my ($oid, $body) = $item =~ /^objectclasses:\s*\(\s*($nameoid)((\s+.*)?)\)\s*$/i;
 
 	my $objc = {
 		'OID'		=> $oid,
@@ -268,26 +339,12 @@ sub ParseObjectClass
 	while ($body !~ /^\s*$/)
 		{
 		my ($key, $rest) = $body =~ /^\s*(\S+)(\s.*$|$)/;
-		if ($key eq 'NAME')
+
+		if ($key eq 'NAME' && scalar(ParseQdescrs($rest)))
 			{
-			my @names = ();
-			if ($rest =~ /^\s*\(/)
-				{
-				my $names;
-				($names, $rest) = $rest =~ /^\s*\(([^)]*)\)(.*)$/;
-				while ($names !~ /^\s*$/)
-					{
-					my $name;
-					($name, $names) = $names =~ /^\s*'([^']*)'(.*)$/;
-					push @{$objc->{'NAME'}}, $name;
-					}
-				}
-			else
-				{
-				my $name;
-				($name, $rest) = $rest =~ /^\s*'([^']*)'(.*)$/;
-				push @{$objc->{'NAME'}}, $name;
-				}
+			my $namesref;
+			($rest, $namesref) = ParseQdescrs($rest);
+			$objc->{'NAME'} = $namesref;
 			}
 		elsif ($key eq 'DESC')
 			{
@@ -299,7 +356,7 @@ sub ParseObjectClass
 			{
 			$objc->{'OBSOLETE'} = 1;
 			}
-		elsif ($key eq 'SUP')
+		elsif ($key eq 'SUP' && scalar(ParseOids($rest)))
 			{
 			my $oidref;
 			($rest, $oidref) = ParseOids($rest);
@@ -309,23 +366,23 @@ sub ParseObjectClass
 			{
 			$objc->{'KIND'} = $key;
 			}
-		elsif ($key eq 'MUST')
+		elsif ($key eq 'MUST' && scalar(ParseOids($rest)))
 			{
 			my $oidref;
 			($rest, $oidref) = ParseOids($rest);
 			$objc->{'MUST'} = $oidref;
 			}
-		elsif ($key eq 'MAY')
+		elsif ($key eq 'MAY' && scalar(ParseOids($rest)))
 			{
 			my $oidref;
 			($rest, $oidref) = ParseOids($rest);
 			$objc->{'MAY'} = $oidref;
 			}
-		elsif ($key =~ /^X-/)
+		elsif ($key =~ /^X-/ && scalar(ParseQdstrings($rest)))
 			{
-			my $val;
-			($val, $rest) = $rest =~ /^\s*'([^']*)'(.*)$/;
-			$objc->{'X-'}->{$key} = $val;
+			my $extsref;
+			($rest, $extsref) = ParseQdstrings($rest);
+			$objc->{'X-'}->{$key} = $extsref;
 			}
 		else
 			{
