@@ -35,6 +35,68 @@ AttributeTypeDescription = LPAREN WSP
              "dSAOperation"            ; DSA-specific operational
 
 
+MatchingRuleDescription = LPAREN WSP
+         numericoid                 ; object identifier
+         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
+         [ SP "DESC" SP qdstring ]  ; description
+         [ SP "OBSOLETE" ]          ; not active
+         SP "SYNTAX" SP numericoid  ; assertion syntax
+         extensions WSP RPAREN      ; extensions
+
+
+MatchingRuleUseDescription = LPAREN WSP
+         numericoid                 ; object identifier
+         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
+         [ SP "DESC" SP qdstring ]  ; description
+         [ SP "OBSOLETE" ]          ; not active
+         SP "APPLIES" SP oids       ; attribute types
+         extensions WSP RPAREN      ; extensions
+
+
+SyntaxDescription = LPAREN WSP
+         numericoid                 ; object identifier
+         [ SP "DESC" SP qdstring ]  ; description
+         extensions WSP RPAREN      ; extensions
+
+
+DITContentRuleDescription = LPAREN WSP
+         numericoid                 ; object identifier
+         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
+         [ SP "DESC" SP qdstring ]  ; description
+         [ SP "OBSOLETE" ]          ; not active
+         [ SP "AUX" SP oids ]       ; auxiliary object classes
+         [ SP "MUST" SP oids ]      ; attribute types
+         [ SP "MAY" SP oids ]       ; attribute types
+         [ SP "NOT" SP oids ]       ; attribute types
+         extensions WSP RPAREN      ; extensions
+
+
+DITStructureRuleDescription = LPAREN WSP
+         ruleid                     ; rule identifier
+         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
+         [ SP "DESC" SP qdstring ]  ; description
+         [ SP "OBSOLETE" ]          ; not active
+         SP "FORM" SP oid           ; NameForm
+         [ SP "SUP" ruleids ]       ; superior rules
+         extensions WSP RPAREN      ; extensions
+
+     ruleids = ruleid / ( LPAREN WSP ruleidlist WSP RPAREN )
+     ruleidlist = ruleid *( SP ruleid )
+     ruleid = number
+
+
+NameFormDescription = LPAREN WSP
+         numericoid                 ; object identifier
+         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
+         [ SP "DESC" SP qdstring ]  ; description
+         [ SP "OBSOLETE" ]          ; not active
+         SP "OC" SP oid             ; structural object class
+         SP "MUST" SP oids          ; attribute types
+         [ SP "MAY" SP oids ]       ; attribute types
+         extensions WSP RPAREN      ; extensions
+
+
+
 
       noidlen = numericoid [ LCURLY len RCURLY ]
       len = number
@@ -122,6 +184,7 @@ AttributeTypeDescription = LPAREN WSP
    conform to the ABNF:
 
       descr = keystring
+
    Where either an object identifier or a short name may be specified,
    the following production is used:
 
