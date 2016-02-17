@@ -41,10 +41,17 @@ use strict;
 use warnings;
 
 
+# Settings
+my $RelaxedTypeOid = 0;
+
+
 # Constants
-my $numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
-my $keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
-my $nameoid = "(?:$numoid|$keystring)";
+my $RE_numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
+my $RE_keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
+my $RE_nameoid = "(?:$RE_numoid|$RE_keystring)";
+my $RE_dstring = "(?:(?:\\\\27|\\\\5c|\\\\5C|[^'\\\\])+)";
+
+my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
 
 
 # State
@@ -108,7 +115,7 @@ sub ParseOid
 	my $oidstr = shift;
 	my $rest;
 
-	if ($oidstr =~ /^\s*($nameoid)(\s.*$|$)/)
+	if ($oidstr =~ /^\s*($RE_nameoid)(\s.*$|$)/)
 		{
 		return ($2, $1);
 		}
@@ -124,7 +131,7 @@ sub ParseOids
 	my @oids = ();
 	my $rest;
 
-	if ($oidstr =~ /^\s*\(\s*($nameoid(?:\s*\$\s*$nameoid)*)\s*\)(\s.*$|$)/)
+	if ($oidstr =~ /^\s*\(\s*($RE_nameoid(?:\s*\$\s*$RE_nameoid)*)\s*\)(\s.*$|$)/)
 		{
 		my $oids = $1;
 		$rest = $2;
@@ -138,7 +145,7 @@ sub ParseOids
 			push @oids, $oid;
 			}
 		}
-	elsif ($oidstr =~ /\s*($nameoid)(\s.*$|$)/)
+	elsif ($oidstr =~ /\s*($RE_nameoid)(\s.*$|$)/)
 		{
 		$rest = $2;
 		push @oids, $1;
@@ -218,11 +225,264 @@ sub ParseQdstrings
 	}
 
 
+#######################################
+
+
+sub Parse_EBNF_extensions
+	{
+	my ($obj, $string) = @_;
+
+	$obj->{'X-'} = {};
+
+	while ($string =~ /^\s+X-([A-Za-z_-]+)\s+(\S.*)$/)
+		{
+		my $key = $1;
+		$string = $2;
+		my $val;
+
+		if (exists($obj->{'X-'}->{$key}))
+			{
+			return undef;
+			}
+
+		if (!scalar(($string, $val) = Parse_EBNF_qdstrings($string)))
+			{
+			return undef;
+			}
+
+		$obj->{'X-'}->{$key} = $val;
+		}
+
+	return $string;
+	}
+
+
+sub Parse_EBNF_noidlen
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_numoid)((?:\{(?:0|[1-9][0-9]*)\})?(?:\s.*$|$))/)
+		{
+		return undef;
+		}
+
+	my $oid = [$1];
+	$string = $2;
+
+	if ($string =~ /^\{(0|[1-9][0-9]*)\}(\s.*$|$)/)
+		{
+		push @$oid, $1;
+		$string = $2;
+		}
+
+	return ($string, $oid);
+	}
+
+
+sub Parse_EBNF_oid
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_nameoid)(\s.*$|$)/)
+		{
+		return undef;
+		}
+
+	return ($2, [$1]);
+	}
+
+
+sub Parse_EBNF_qdescrs
+	{
+	my $string = shift;
+
+	my @qdescrs = ();
+	my $rest;
+
+	if ($string =~ /^\s*\(\s*('$RE_keystring'(\s+'$RE_keystring')*)\s*\)(\s.*$|$)/)
+		{
+		my $descr;
+		my $qdescrlist = $1;
+		$rest = $3;
+
+		while ($qdescrlist !~ /^\s*$/)
+			{
+			($descr, $qdescrlist) = $qdescrlist =~ /^\s*'($RE_keystring)'(.*$)/;
+			push @qdescrs, $descr;
+			}
+		}
+	elsif ($string =~ /^\s*'($RE_keystring)'(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @qdescrs, $1;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@qdescrs);
+	}
+
+
+sub Parse_EBNF_qdstring
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*'($RE_dstring)'(\s.*$|$)/)
+		{
+		return undef;
+		}
+	my ($dstring, $rest) = ($1, $2);
+
+	$dstring =~ s/\\27/\'/g;
+	$dstring =~ s/\\5c|\\5C/\\/g;
+
+	return ($rest, $dstring);
+	}
+
+
+sub Parse_EBNF_qdstrings
+	{
+	my $string = shift;
+
+	my @qdstrings = ();
+	my $rest;
+
+	if ($string =~ /^\s*\(\s*('$RE_dstring'(?:\s+'$RE_dstring')*)\s*\)(\s.*$|$)/)
+		{
+		my $dstring;
+		my $qdstringlist = $1;
+		$rest = $2;
+
+		while ($qdstringlist !~ /^\s*$/)
+			{
+			($dstring, $qdstringlist) = $qdstringlist =~ /^\s*'($RE_dstring)'(.*$)/;
+			$dstring =~ s/\\27/\'/g;
+			$dstring =~ s/\\5c|\\5C/\\/g;
+			push @qdstrings, $dstring;
+			}
+		}
+	elsif ($string =~ /^\s*'($RE_dstring)'(\s.*$|$)/)
+		{
+		my $dstring = $1;
+		$rest = $2;
+		$dstring =~ s/\\27/\'/g;
+		$dstring =~ s/\\5c|\\5C/\\/g;
+		push @qdstrings, $dstring;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@qdstrings);
+	}
+
+
+sub Parse_EBNF_usage
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*(userApplications|directoryOperation|distributedOperation|dSAOperation)(\s.*$|$)/)
+		{
+		return undef;
+		}
+
+	return ($2, $1);
+	}
+
+
+sub Return_1
+	{
+	return ($_[0], 1);
+	}
+
+
+sub TableParse
+	{
+	my ($table, $obj, $string) = @_;
+
+	for (my $i = 0; $i < scalar(@$table); $i++)
+		{
+		my ($field, $parser, $default, $key, $req) = @{$table->[$i]};
+
+		$obj->{$key} = $default;
+
+		if ($string =~ /^\s+$field(\s.*$|$)/)
+			{
+			my ($rest, $val);
+
+			if (!scalar(($rest, $val) = &$parser($1)))
+				{
+				return undef;
+				}
+
+			$obj->{$key} = $val;
+			$string = $rest;
+			}
+		}
+
+	return $string;
+	}
+
+
+my $AttributeTypeDescription_ParseTable = [
+		# Field				Parser			Default			Key			Req
+		['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+		['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+		['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+		['SUP',				\&Parse_EBNF_oid,	[],			'SUP',			0,],
+		['EQUALITY',			\&Parse_EBNF_oid,	[],			'EQALITY',		0,],
+		['ORDERING',			\&Parse_EBNF_oid,	[],			'ORDERING',		0,],
+		['SUBSTR',			\&Parse_EBNF_oid,	[],			'SUBSTR',		0,],
+		['SYNTAX',			\&Parse_EBNF_noidlen,	[],			'SYNTAX',		0,],
+		['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
+		['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
+		['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
+		['USAGE',			\&Parse_EBNF_usage,	'userApplications',	'USAGE',		0,],
+		];
+
+		
+sub Parse_LDAP_AttributeTypeDescription
+	{
+	my $value = shift;
+
+	if ($value !~ /^\(\s*($RE_typeoid)((?:\s+\S+)*)\s*\)\s*$/)
+		{
+		return undef;
+		}
+
+	my $attr = {
+		'-Type'		=> 'AttributeTypeDescription',
+		'OID'		=> $1,
+		};
+	$value = $2;
+
+	if (!defined ($value = TableParse($AttributeTypeDescription_ParseTable, $attr, $value)))
+		{
+		return undef;
+		}
+
+	if (!defined ($value = Parse_EBNF_extensions($attr, $value)))
+		{
+		return undef;
+		}
+
+	if ($value !~ /^\s*$/)
+		{
+		return undef;
+		}
+
+	return $attr;
+	}
+
+
 sub ParseAttribute
 	{
 	my ($item, $file, $line, $aref) = @_;
 
-	my ($oid, $body) = $item =~ /^attributetypes:\s*\(\s*($nameoid)((\s+.*)?)\)\s*$/i;
+	my ($oid, $body) = $item =~ /^attributetypes:\s*\(\s*($RE_nameoid)((\s+.*)?)\)\s*$/i;
 
 	my $attr = {
 		'OID'		=> $oid,
@@ -322,7 +582,7 @@ sub ParseObjectClass
 	{
 	my ($item, $file, $line, $aref) = @_;
 
-	my ($oid, $body) = $item =~ /^objectclasses:\s*\(\s*($nameoid)((\s+.*)?)\)\s*$/i;
+	my ($oid, $body) = $item =~ /^objectclasses:\s*\(\s*($RE_nameoid)((\s+.*)?)\)\s*$/i;
 
 	my $objc = {
 		'OID'		=> $oid,
@@ -408,9 +668,19 @@ while (@ARGV)
 	open(my $fh, '<', $schemafile) || next;
 	while ((($item, $line) = unwrap($fh)) && $line)
 		{
-		if ($item =~ /^attributetypes:/i)
+		if ($item =~ /^attributetypes:\s*(\S.*)$/i)
 			{
-			ParseAttribute($item, $schemafile, $line, \@attrs);
+			my $obj;
+			if (!defined($obj = Parse_LDAP_AttributeTypeDescription($1)))
+				{
+				say 'Attribute definition ignored due to parse error';
+				say "\tLine $line of '$schemafile'";
+				next;
+				}
+			$obj->{'-Defined'} = [$schemafile, $line];
+			push @attrs, $obj;
+#use Data::Dumper;
+#say Dumper($obj);
 			}
 		elsif ($item =~ /^objectclasses:/i)
 			{
@@ -653,15 +923,15 @@ attribute = (
 	DESC		=>	$,	# optional: undef	# string
 	OBSOLETE	=>	bool,	# optional: false
 	SUP		=>	[],	# optional: undef	# oid
-	EQUALITY	=>	$,	# optional: undef	# oid
-	ORDERING	=>	$,	# optional: undef	# oid
-	SUBSTR		=>	$,	# optional: undef	# oid
-	SYNTAX		=>	$,	# optional: undef	# oid
+	EQUALITY	=>	[],	# optional: undef	# oid
+	ORDERING	=>	[],	# optional: undef	# oid
+	SUBSTR		=>	[],	# optional: undef	# oid
+	SYNTAX		=>	[[]],	# optional: undef	# oid
 	SINGLE-VALUE	=>	bool,	# optional: false
 	COLLECTIVE	=>	bool,	# optional: false
 	RO		=>	bool,	# optional: false
 	USAGE		=>	$,	# optional: 'userApplications'
-	Extensions	=>	[],	# optional: []		# hashrefs
+	Extensions	=>	{[]},	# optional: []		# hashrefs
 	-Defined	=>	[],	# schema file & line defined
 	-Type		=>	'attribute',
 
@@ -684,7 +954,7 @@ objectclass = (
 	KIND		=>	$,	# optional: 'STRUCTURAL'
 	MUST		=>	[],	# optional: []		# oids
 	MAY		=>	[],	# optional: []		# oids
-	Extensions	=>	[],	# optional: []		# hashrefs
+	Extensions	=>	{[]},	# optional: []		# hashrefs
 	-Defined	=>	[],	# schema file & line defined
 	-Type		=>	'objectclass',
 
