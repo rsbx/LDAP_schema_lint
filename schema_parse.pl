@@ -292,6 +292,41 @@ sub Parse_EBNF_oid
 	}
 
 
+sub Parse_EBNF_oids
+	{
+	my $oidstr = shift;
+
+	my @oids = ();
+	my $rest;
+
+	if ($oidstr =~ /^\s*\(\s*($RE_nameoid(?:\s*\$\s*$RE_nameoid)*)\s*\)(\s.*$|$)/)
+		{
+		my $oids = $1;
+		$rest = $2;
+
+		$oids =~ s/\$/ /g;
+
+		while ($oids !~ /^\s*$/)
+			{
+			my $oid;
+			($oid, $oids) = $oids =~ /^\s*(\S+)(\s.*$|$)/;
+			push @oids, $oid;
+			}
+		}
+	elsif ($oidstr =~ /\s*($RE_nameoid)(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @oids, $1;
+		}
+	else
+		{
+		return undef;
+		}
+
+	return ($rest, \@oids);
+	}
+
+
 sub Parse_EBNF_qdescrs
 	{
 	my $string = shift;
@@ -427,6 +462,40 @@ sub TableParse
 	}
 
 
+sub Parse_TypeDescription
+	{
+	my ($value, $table, $type) = @_;
+
+	if ($value !~ /^\(\s*($RE_typeoid)((?:\s+\S+)*)\s*\)\s*$/)
+		{
+		return undef;
+		}
+
+	my $obj = {
+		'-Type'	=> $type,
+		'OID'	=> $1,
+		};
+	$value = $2;
+
+	if (!defined ($value = TableParse($table, $obj, $value)))
+		{
+		return undef;
+		}
+
+	if (!defined ($value = Parse_EBNF_extensions($obj, $value)))
+		{
+		return undef;
+		}
+
+	if ($value !~ /^\s*$/)
+		{
+		return undef;
+		}
+
+	return $obj;
+	}
+
+
 my $AttributeTypeDescription_ParseTable = [
 		# Field				Parser			Default			Key			Req
 		['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
@@ -448,33 +517,45 @@ sub Parse_LDAP_AttributeTypeDescription
 	{
 	my $value = shift;
 
-	if ($value !~ /^\(\s*($RE_typeoid)((?:\s+\S+)*)\s*\)\s*$/)
+	my $obj = Parse_TypeDescription($value, $AttributeTypeDescription_ParseTable, 'AttributeTypeDescription');
+
+	if (defined $obj)
 		{
-		return undef;
+		# Singular type description specific checks.
+
 		}
 
-	my $attr = {
-		'-Type'		=> 'AttributeTypeDescription',
-		'OID'		=> $1,
-		};
-	$value = $2;
+	return $obj;
+	}
 
-	if (!defined ($value = TableParse($AttributeTypeDescription_ParseTable, $attr, $value)))
+
+my $ObjectClassDescription_ParseTable = [
+		# Field				Parser			Default			Key			Req
+		['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+		['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+		['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+		['SUP',				\&Parse_EBNF_oids,	[],			'SUP',			0,],
+		['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
+		['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
+		['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
+		['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			0,],
+		['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
+		];
+
+
+sub Parse_LDAP_ObjectClassDescription
+	{
+	my $value = shift;
+
+	my $obj = Parse_TypeDescription($value, $ObjectClassDescription_ParseTable, 'ObjectClassDescription');
+
+	if (defined $obj)
 		{
-		return undef;
+		# Singular type description specific checks.
+
 		}
 
-	if (!defined ($value = Parse_EBNF_extensions($attr, $value)))
-		{
-		return undef;
-		}
-
-	if ($value !~ /^\s*$/)
-		{
-		return undef;
-		}
-
-	return $attr;
+	return $obj;
 	}
 
 
@@ -682,9 +763,19 @@ while (@ARGV)
 #use Data::Dumper;
 #say Dumper($obj);
 			}
-		elsif ($item =~ /^objectclasses:/i)
+		elsif ($item =~ /^objectclasses:\s*(\S.*)$/i)
 			{
-			ParseObjectClass($item, $schemafile, $line, \@objcs);
+			my $obj;
+			if (!defined($obj = Parse_LDAP_ObjectClassDescription($1)))
+				{
+				say 'ObjectClass definition ignored due to parse error';
+				say "\tLine $line of '$schemafile'";
+				next;
+				}
+			$obj->{'-Defined'} = [$schemafile, $line];
+			push @objcs, $obj;
+#use Data::Dumper;
+#say Dumper($obj);
 			}
 		else
 			{
@@ -951,7 +1042,9 @@ objectclass = (
 	DESC		=>	$,	# optional: undef
 	OBSOLETE	=>	bool,	# optional: false
 	SUP		=>	[],	# optional: []		# oids
-	KIND		=>	$,	# optional: 'STRUCTURAL'
+	ABSTRACT	=>	bool,	# optional: false
+	STRUCTURAL	=>	bool,	# optional: false
+	AUXILIARY	=>	bool,	# optional: false
 	MUST		=>	[],	# optional: []		# oids
 	MAY		=>	[],	# optional: []		# oids
 	Extensions	=>	{[]},	# optional: []		# hashrefs
