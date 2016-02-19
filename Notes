@@ -1,0 +1,18 @@
+Assumption:
+	Names, AKA short names or descriptors, are compared ignoring case.
+	Authority: ?????
+
+Assumption:
+	Each schema type permitting optional names (ObjectClass,
+		AttributeType, MatchingRule, MatchingRuleUse, DITContentRule,
+		DITStructureRule, NameForm) is a separate namespace.
+	Authority: ?????
+
+Assumption:
+	There is only 1 namespace for oids.
+	Authority: ?????
+
+Assumption:
+	Names are prefered over oids.
+	Authority: ?????
+
