@@ -1,18 +1,23 @@
 Assumption:
-	Names, AKA short names or descriptors, are compared ignoring case.
-	Authority: ?????
+	There is only 1 namespace for oids.
+	Authority:
 
-Assumption:
+Confirmed:
+	Names, AKA short names or descriptors, are compared ignoring case.
+	Authority: RFC-4512 Section 1.4
+
+Confirmed:
 	Each schema type permitting optional names (ObjectClass,
 		AttributeType, MatchingRule, MatchingRuleUse, DITContentRule,
 		DITStructureRule, NameForm) is a separate namespace.
-	Authority: ?????
+	Authority: RFC-4512 Section 6.2
 
-Assumption:
-	There is only 1 namespace for oids.
-	Authority: ?????
-
-Assumption:
+Confirmed:
 	Names are prefered over oids.
-	Authority: ?????
+	Authority: RFC-4512 Section 1.4
+
+Confirmed:
+	ObjectClasses default to STRUCTURAL unless otherwise indicated.
+	Authority: RFC-4512 Section 4.1.1
+
 
