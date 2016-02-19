@@ -127,12 +127,12 @@ sub Parse_EBNF_extensions
 
 		if (exists($obj->{'X-'}->{$key}))
 			{
-			return undef;
+			return ();
 			}
 
 		if (!scalar(($string, $val) = Parse_EBNF_qdstrings($string)))
 			{
-			return undef;
+			return ();
 			}
 
 		$obj->{'X-'}->{$key} = $val;
@@ -148,7 +148,7 @@ sub Parse_EBNF_noidlen
 
 	if ($string !~ /^\s*($RE_numoid)((?:\{(?:0|[1-9][0-9]*)\})?(?:\s.*$|$))/)
 		{
-		return undef;
+		return ();
 		}
 
 	my $oid = [$1];
@@ -164,13 +164,26 @@ sub Parse_EBNF_noidlen
 	}
 
 
+sub Parse_EBNF_numoid
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_numoid)(\s.*$|$)/)
+		{
+		return ();
+		}
+
+	return ($2, [$1]);
+	}
+
+
 sub Parse_EBNF_oid
 	{
 	my $string = shift;
 
 	if ($string !~ /^\s*($RE_nameoid)(\s.*$|$)/)
 		{
-		return undef;
+		return ();
 		}
 
 	return ($2, [$1]);
@@ -205,7 +218,7 @@ sub Parse_EBNF_oids
 		}
 	else
 		{
-		return undef;
+		return ();
 		}
 
 	return ($rest, \@oids);
@@ -238,7 +251,7 @@ sub Parse_EBNF_qdescrs
 		}
 	else
 		{
-		return undef;
+		return ();
 		}
 
 	return ($rest, \@qdescrs);
@@ -251,7 +264,7 @@ sub Parse_EBNF_qdstring
 
 	if ($string !~ /^\s*'($RE_dstring)'(\s.*$|$)/)
 		{
-		return undef;
+		return ();
 		}
 	my ($dstring, $rest) = ($1, $2);
 
@@ -293,7 +306,7 @@ sub Parse_EBNF_qdstrings
 		}
 	else
 		{
-		return undef;
+		return ();
 		}
 
 	return ($rest, \@qdstrings);
@@ -306,7 +319,7 @@ sub Parse_EBNF_usage
 
 	if ($string !~ /^\s*(userApplications|directoryOperation|distributedOperation|dSAOperation)(\s.*$|$)/)
 		{
-		return undef;
+		return ();
 		}
 
 	return ($2, $1);
@@ -362,12 +375,12 @@ sub Parse_TypeDescription
 		};
 	$value = $2;
 
-	if (!defined ($value = TableParse($table, $obj, $value)))
+	if (!defined($value = TableParse($table, $obj, $value)))
 		{
 		return undef;
 		}
 
-	if (!defined ($value = Parse_EBNF_extensions($obj, $value)))
+	if (!defined($value = Parse_EBNF_extensions($obj, $value)))
 		{
 		return undef;
 		}
@@ -381,67 +394,182 @@ sub Parse_TypeDescription
 	}
 
 
-my $AttributeTypeDescription_ParseTable = [
-		# Field				Parser			Default			Key			Req
-		['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-		['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
-		['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-		['SUP',				\&Parse_EBNF_oid,	[],			'SUP',			0,],
-		['EQUALITY',			\&Parse_EBNF_oid,	[],			'EQALITY',		0,],
-		['ORDERING',			\&Parse_EBNF_oid,	[],			'ORDERING',		0,],
-		['SUBSTR',			\&Parse_EBNF_oid,	[],			'SUBSTR',		0,],
-		['SYNTAX',			\&Parse_EBNF_noidlen,	[],			'SYNTAX',		0,],
-		['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
-		['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
-		['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
-		['USAGE',			\&Parse_EBNF_usage,	'userApplications',	'USAGE',		0,],
-		];
-
-		
-sub Parse_LDAP_AttributeTypeDescription
+sub Check_Pass
 	{
-	my $value = shift;
+	return shift;
+	}
 
-	my $obj = Parse_TypeDescription($value, $AttributeTypeDescription_ParseTable, 'AttributeTypeDescription');
 
-	if (defined $obj)
+my %Table_LDAP_RFC4512_Schema_Type_Parse = (
+		lc('objectClasses') => {
+				'ParseTable' => [
+						# Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,   [],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,  undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['SUP',				\&Parse_EBNF_oids,      [],			'SUP',			0,],
+						['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
+						['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
+						['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
+						['MUST',			\&Parse_EBNF_oids,      [],			'MUST',			0,],
+						['MAY',				\&Parse_EBNF_oids,      [],			'MAY',			0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('attributeTypes') => {
+				'ParseTable' => [
+						# Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['SUP',				\&Parse_EBNF_oid,	[],			'SUP',			0,],
+						['EQUALITY',			\&Parse_EBNF_oid,	[],			'EQALITY',		0,],
+						['ORDERING',			\&Parse_EBNF_oid,	[],			'ORDERING',		0,],
+						['SUBSTR',			\&Parse_EBNF_oid,	[],			'SUBSTR',		0,],
+						['SYNTAX',			\&Parse_EBNF_noidlen,	[],			'SYNTAX',		0,],
+						['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
+						['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
+						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
+						['USAGE',			\&Parse_EBNF_usage,	'userApplications',	'USAGE',		0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('matchingRules') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['SYNTAX',			\&Parse_EBNF_numoid,	[],			'SYNTAX',		1,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('matchingRuleUse') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['APPLIES',			\&Parse_EBNF_oids,	[],			'APPLIES',		1,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('ldapSyntaxes') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('dITContentRules') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['AUX',				\&Parse_EBNF_oids,	[],			'AUX',			0,],
+						['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			0,],
+						['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
+						['NOT',				\&Parse_EBNF_oids,	[],			'NOT',			0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('dITStructureRules') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['FORM',			\&Parse_EBNF_oid,	[],			'FORM',			1,],
+						['SUP',				\&Parse_EBNF_ruleids,	[],			'SUP',			0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		lc('nameForms') => {
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['OC',				\&Parse_EBNF_oid,	[],			'OC',			1,],
+						['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			1,],
+						['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
+						],
+				'Check' => \&Check_Pass,
+				},
+		);
+
+
+sub Parse_LDAP_RFC4512_Schema_Type
+	{
+	my ($key, $value, $parsetableref) = @_;
+
+	my $obj = Parse_TypeDescription($value, $parsetableref->{'ParseTable'}, $key);
+
+	if (defined($obj))
 		{
-		# Singular type description specific checks.
-
+		$obj = $parsetableref->{'Check'}($obj);
 		}
 
 	return $obj;
 	}
 
 
-my $ObjectClassDescription_ParseTable = [
-		# Field				Parser			Default			Key			Req
-		['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-		['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
-		['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-		['SUP',				\&Parse_EBNF_oids,	[],			'SUP',			0,],
-		['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
-		['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
-		['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
-		['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			0,],
-		['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
-		];
+#######################################
 
 
-sub Parse_LDAP_ObjectClassDescription
+my %SchemaElements = ();
+
+foreach my $key (keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 	{
-	my $value = shift;
+	$SchemaElements{$key} = {};
+	$SchemaElements{$key}->{'Descriptions'} = [];
+	}
 
-	my $obj = Parse_TypeDescription($value, $ObjectClassDescription_ParseTable, 'ObjectClassDescription');
 
-	if (defined $obj)
+while (@ARGV)
+	{
+	my $schemafile = shift @ARGV;
+	my ($item, $line);
+
+	open(my $fh, '<', $schemafile) || next;
+	while ((($item, $line) = unwrap($fh)) && $line)
 		{
-		# Singular type description specific checks.
+		if ($item !~ /^($RE_keystring)\s*:\s*(\S.*)$/)
+			{
+			next;
+			}
 
+		my ($attribute, $value) = ($1, $2);
+
+		if (exists($Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)}))
+			{
+			my $obj;
+			if (!defined($obj = Parse_LDAP_RFC4512_Schema_Type(
+					lc($attribute),
+					$value,
+					$Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)},
+					)))
+				{
+				say "$attribute description ignored due to parse error";
+				say "\tLine $line of '$schemafile'";
+				next;
+				}
+
+			$obj->{'-Defined'} = [$schemafile, $line];
+			push @{$SchemaElements{lc($attribute)}->{'Descriptions'}}, $obj;
+			}
+		else
+			{
+#			say $item;
+			}
 		}
 
-	return $obj;
+	close($fh);
 	}
+
+
+exit(0);
 
 
 my @attrs = ();
