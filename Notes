@@ -2,6 +2,10 @@ Assumption:
 	There is only 1 namespace for oids.
 	Authority:
 
+Assumption:
+	The first name in the NAME field list is the prefered name.
+	Authority:
+
 Confirmed:
 	Names, AKA short names or descriptors, are compared ignoring case.
 	Authority: RFC-4512 Section 1.4
