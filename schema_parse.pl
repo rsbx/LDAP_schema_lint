@@ -140,12 +140,12 @@ sub CmpOids
 		my $a = shift @A;
 		my $b = shift @B;
 
-		if ($t = ($b =~ /[0-9]+/ <=> $a =~ /[0-9]+/))
+		if ($t = ($b =~ /^[0-9]+/ <=> $a =~ /^[0-9]+/))
 			{
 			return $t;
 			}
 
-		if ($t = ($a =~ /[0-9]+/) ? $a <=> $b : $a cmp $b)
+		if ($t = ($a =~ /^[0-9]+/) ? $a <=> $b : $a cmp $b)
 			{
 			return $t;
 			}
@@ -628,7 +628,7 @@ while (@ARGV)
 					$Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)},
 					)))
 				{
-				say "$attribute description ignored due to parse error";
+				say "ERROR: '$attribute' declaration ignored due to parse error";
 				say "\tLine $line of '$schemafile'";
 				next;
 				}
@@ -646,146 +646,88 @@ while (@ARGV)
 	}
 
 
-exit(0);
+my %Oids = ();
+my %Names = ();
 
 
-my @attrs = ();
-my @objcs = ();
-
-while (@ARGV)
+foreach my $key (sort keys %SchemaElements)
 	{
-	my $schemafile = shift @ARGV;
-	my ($item, $line);
+	say scalar(@{$SchemaElements{$key}->{'Descriptions'}}), "\t'$key' elements defined";
 
-	open(my $fh, '<', $schemafile) || next;
-	while ((($item, $line) = unwrap($fh)) && $line)
+	$SchemaElements{$key}->{'Names'} = {};
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
 		{
-		if ($item =~ /^attributetypes:\s*(\S.*)$/i)
+		my $oid = lc($element->{'OID'});
+		$Oids{$oid} = [] if !exists $Oids{$oid};
+		push @{$Oids{$oid}}, $element;
+
+		if (exists $element->{'NAME'})
 			{
-			my $obj;
-			if (!defined($obj = Parse_LDAP_AttributeTypeDescription($1)))
+			foreach my $name (@{$element->{'NAME'}})
 				{
-				say 'Attribute definition ignored due to parse error';
-				say "\tLine $line of '$schemafile'";
-				next;
+				$name = lc($name);
+				$SchemaElements{$key}->{'Names'}->{$name} = [] if !exists $SchemaElements{$key}->{'Names'}->{$name};
+				push @{$SchemaElements{$key}->{'Names'}->{$name}}, $element;
+
+				$Names{$name} = {} if !exists $Names{$name};
+				$Names{$name}->{$key} = 1;
 				}
-			$obj->{'-Defined'} = [$schemafile, $line];
-			push @attrs, $obj;
-#use Data::Dumper;
-#say Dumper($obj);
+
 			}
-		elsif ($item =~ /^objectclasses:\s*(\S.*)$/i)
+
+		}
+
+	}
+
+
+foreach my $oid (sort {CmpOids($a, $b)} keys %Oids)
+	{
+	next if scalar(@{$Oids{$oid}}) == 1;
+
+	say "ERROR: OID '$oid' declared multiple times:";
+	foreach my $elem (@{$Oids{$oid}})
+		{
+		say "\t'", $elem->{'-Type'},"'";
+		say "\t\tLine: ", $elem->{'-Defined'}->[1], " in file: '", $elem->{'-Defined'}->[0], "'";
+		}
+	}
+
+
+foreach my $key (sort keys %SchemaElements)
+	{
+	foreach my $name (sort keys %{$SchemaElements{$key}->{'Names'}})
+		{
+		next if scalar(@{$SchemaElements{$key}->{'Names'}->{$name}}) == 1;
+
+		say "ERROR: Name '$name' declared multiple times:";
+		foreach my $elem (@{$SchemaElements{$key}->{'Names'}->{$name}})
 			{
-			my $obj;
-			if (!defined($obj = Parse_LDAP_ObjectClassDescription($1)))
-				{
-				say 'ObjectClass definition ignored due to parse error';
-				say "\tLine $line of '$schemafile'";
-				next;
-				}
-			$obj->{'-Defined'} = [$schemafile, $line];
-			push @objcs, $obj;
-#use Data::Dumper;
-#say Dumper($obj);
+			say "\t'", $elem->{'-Type'},"'";
+			say "\t\tLine: ", $elem->{'-Defined'}->[1], " in file: '", $elem->{'-Defined'}->[0], "'";
 			}
-		else
+		}
+	}
+
+
+foreach my $name (sort keys %Names)
+	{
+	next if scalar(keys %{$Names{$name}}) == 1;
+#say join(' ', $name, sort keys %{$Names{$name}});
+
+	say "WARNING: Name '$name' declared as multiple schema element types:";
+	foreach my $key (sort keys %{$Names{$name}})
+		{
+		foreach my $elem (@{$SchemaElements{$key}->{'Names'}->{$name}})
 			{
-#			say $item;
+			say "\t'", $elem->{'-Type'},"'";
+			say "\t\tLine: ", $elem->{'-Defined'}->[1], " in file: '", $elem->{'-Defined'}->[0], "'";
 			}
 		}
-	close($fh);
 	}
 
-say scalar(@attrs), ' attributes defined';
-say scalar(@objcs), ' objectclasses defined';
 
-my %oids = ();
-my %names = ();
-
-for my $item (@attrs, @objcs)
-	{
-	my $oid = $item->{'OID'};
-	$oids{lc $oid} = [] if !defined $oids{lc $oid};
-	push @{$oids{lc $oid}}, $item;
-
-	for my $name (@{$item->{'NAME'}})
-		{
-		$names{lc $name} = [] if !defined $names{lc $name};
-		push @{$names{lc $name}}, $item;
-		}
-	}
-
-for my $oid (sort {$a cmp $b} keys %oids)
-	{
-	next unless exists $names{lc $oid};
-
-	say "OID and Name conflict: '$oid'";
-	}
-
-for my $oid (sort {$a cmp $b} keys %oids)
-	{
-	next if @{$oids{$oid}} == 1;
-
-	say "OID '$oid' defined multiple times:";
-	for my $item (@{$oids{$oid}})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
-
-for my $oid (sort {$a cmp $b} keys %oids)
-	{
-	next if @{$oids{$oid}} == 1;
-
-	my $type = $oids{$oid}->[0]->{'-Type'};
-	my $conflict = 0;
-	for my $item (@{$oids{$oid}})
-		{
-		$conflict = 1 if $type ne $item->{'-Type'};
-		}
-
-	next unless $conflict;
-
-	say "OID '$oid' defined with multiple types:";
-	for my $item (@{$oids{$oid}})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
-
-for my $name (sort {$a cmp $b} keys %names)
-	{
-	next if @{$names{$name}} == 1;
-
-	say "NAME '$name' defined multiple times:";
-	for my $item (@{$names{$name}})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
-
-for my $name (sort {$a cmp $b} keys %names)
-	{
-	next if @{$names{$name}} == 1;
-
-	my $type = $names{$name}->[0]->{'-Type'};
-	my $conflict = 0;
-	for my $item (@{$names{$name}})
-		{
-		$conflict = 1 if $type ne $item->{'-Type'};
-		}
-	next unless $conflict;
-
-	say "NAME '$name' defined with multiple types:";
-	for my $item (@{$names{$name}})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
+__END__
 
 
 #
