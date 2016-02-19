@@ -49,7 +49,7 @@ my $RelaxedTypeOid = 1;
 my $RE_numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
 my $RE_keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
 my $RE_nameoid = "(?:$RE_numoid|$RE_keystring)";
-my $RE_dstring = "(?:(?:\\\\27|\\\\5c|\\\\5C|[^'\\\\])*)";
+my $RE_dstring = "(?:(?:\\\\27|\\\\5c|\\\\5C|[^'\\\\])+)";
 
 my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
 
