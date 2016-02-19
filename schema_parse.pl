@@ -113,7 +113,7 @@ sub unwrap
 #######################################
 
 
-sub Parse_EBNF_extensions
+sub Parse_ABNF_extensions
 	{
 	my ($obj, $string) = @_;
 
@@ -130,7 +130,7 @@ sub Parse_EBNF_extensions
 			return ();
 			}
 
-		if (!scalar(($string, $val) = Parse_EBNF_qdstrings($string)))
+		if (!scalar(($string, $val) = Parse_ABNF_qdstrings($string)))
 			{
 			return ();
 			}
@@ -142,7 +142,7 @@ sub Parse_EBNF_extensions
 	}
 
 
-sub Parse_EBNF_noidlen
+sub Parse_ABNF_noidlen
 	{
 	my $string = shift;
 
@@ -164,7 +164,7 @@ sub Parse_EBNF_noidlen
 	}
 
 
-sub Parse_EBNF_numoid
+sub Parse_ABNF_numoid
 	{
 	my $string = shift;
 
@@ -177,7 +177,7 @@ sub Parse_EBNF_numoid
 	}
 
 
-sub Parse_EBNF_oid
+sub Parse_ABNF_oid
 	{
 	my $string = shift;
 
@@ -190,7 +190,7 @@ sub Parse_EBNF_oid
 	}
 
 
-sub Parse_EBNF_oids
+sub Parse_ABNF_oids
 	{
 	my $oidstr = shift;
 
@@ -225,7 +225,7 @@ sub Parse_EBNF_oids
 	}
 
 
-sub Parse_EBNF_qdescrs
+sub Parse_ABNF_qdescrs
 	{
 	my $string = shift;
 
@@ -258,7 +258,7 @@ sub Parse_EBNF_qdescrs
 	}
 
 
-sub Parse_EBNF_qdstring
+sub Parse_ABNF_qdstring
 	{
 	my $string = shift;
 
@@ -275,7 +275,7 @@ sub Parse_EBNF_qdstring
 	}
 
 
-sub Parse_EBNF_qdstrings
+sub Parse_ABNF_qdstrings
 	{
 	my $string = shift;
 
@@ -313,7 +313,7 @@ sub Parse_EBNF_qdstrings
 	}
 
 
-sub Parse_EBNF_usage
+sub Parse_ABNF_usage
 	{
 	my $string = shift;
 
@@ -380,7 +380,7 @@ sub Parse_TypeDescription
 		return undef;
 		}
 
-	if (!defined($value = Parse_EBNF_extensions($obj, $value)))
+	if (!defined($value = Parse_ABNF_extensions($obj, $value)))
 		{
 		return undef;
 		}
@@ -404,96 +404,96 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('objectClasses') => {
 				'ParseTable' => [
 						# Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,   [],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,  undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,   [],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,  undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SUP',				\&Parse_EBNF_oids,      [],			'SUP',			0,],
+						['SUP',				\&Parse_ABNF_oids,      [],			'SUP',			0,],
 						['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
 						['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
 						['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
-						['MUST',			\&Parse_EBNF_oids,      [],			'MUST',			0,],
-						['MAY',				\&Parse_EBNF_oids,      [],			'MAY',			0,],
+						['MUST',			\&Parse_ABNF_oids,      [],			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,      [],			'MAY',			0,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('attributeTypes') => {
 				'ParseTable' => [
 						# Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SUP',				\&Parse_EBNF_oid,	[],			'SUP',			0,],
-						['EQUALITY',			\&Parse_EBNF_oid,	[],			'EQALITY',		0,],
-						['ORDERING',			\&Parse_EBNF_oid,	[],			'ORDERING',		0,],
-						['SUBSTR',			\&Parse_EBNF_oid,	[],			'SUBSTR',		0,],
-						['SYNTAX',			\&Parse_EBNF_noidlen,	[],			'SYNTAX',		0,],
+						['SUP',				\&Parse_ABNF_oid,	[],			'SUP',			0,],
+						['EQUALITY',			\&Parse_ABNF_oid,	[],			'EQALITY',		0,],
+						['ORDERING',			\&Parse_ABNF_oid,	[],			'ORDERING',		0,],
+						['SUBSTR',			\&Parse_ABNF_oid,	[],			'SUBSTR',		0,],
+						['SYNTAX',			\&Parse_ABNF_noidlen,	[],			'SYNTAX',		0,],
 						['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
 						['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
 						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
-						['USAGE',			\&Parse_EBNF_usage,	'userApplications',	'USAGE',		0,],
+						['USAGE',			\&Parse_ABNF_usage,	'userApplications',	'USAGE',		0,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('matchingRules') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SYNTAX',			\&Parse_EBNF_numoid,	[],			'SYNTAX',		1,],
+						['SYNTAX',			\&Parse_ABNF_numoid,	[],			'SYNTAX',		1,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('matchingRuleUse') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['APPLIES',			\&Parse_EBNF_oids,	[],			'APPLIES',		1,],
+						['APPLIES',			\&Parse_ABNF_oids,	[],			'APPLIES',		1,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('ldapSyntaxes') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('dITContentRules') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['AUX',				\&Parse_EBNF_oids,	[],			'AUX',			0,],
-						['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			0,],
-						['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
-						['NOT',				\&Parse_EBNF_oids,	[],			'NOT',			0,],
+						['AUX',				\&Parse_ABNF_oids,	[],			'AUX',			0,],
+						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
+						['NOT',				\&Parse_ABNF_oids,	[],			'NOT',			0,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('dITStructureRules') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['FORM',			\&Parse_EBNF_oid,	[],			'FORM',			1,],
-						['SUP',				\&Parse_EBNF_ruleids,	[],			'SUP',			0,],
+						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
+						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
 						],
 				'Check' => \&Check_Pass,
 				},
 		lc('nameForms') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_EBNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_EBNF_qdstring,	undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['OC',				\&Parse_EBNF_oid,	[],			'OC',			1,],
-						['MUST',			\&Parse_EBNF_oids,	[],			'MUST',			1,],
-						['MAY',				\&Parse_EBNF_oids,	[],			'MAY',			0,],
+						['OC',				\&Parse_ABNF_oid,	[],			'OC',			1,],
+						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			1,],
+						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						],
 				'Check' => \&Check_Pass,
 				},
