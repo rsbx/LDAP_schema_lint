@@ -394,9 +394,41 @@ sub Parse_TypeDescription
 	}
 
 
-sub Check_Pass
+sub Check_Isolated_Pass
 	{
 	return shift;
+	}
+
+
+sub Check_Isolated_ObjectClasses
+	{
+	my $obj = shift;
+
+	my $count = $obj->{'-ABSTRACT'} + $obj->{'-STRUCTURAL'} + $obj->{'-AUXILIARY'};
+
+	if ($count == 0)
+		{
+		 $obj->{'-STRUCTURAL'} = 1;
+		}
+	elsif ($count != 1)
+		{
+		return undef;
+		}
+
+	return $obj;
+	}
+
+
+sub Check_Isolated_AttributeTypes
+	{
+	my $obj = shift;
+
+	if (!scalar($obj->{'SUP'}) && !scalar($obj->{'SYNTAX'}))
+		{
+		return undef;
+		}
+
+	return $obj;
 	}
 
 
@@ -414,7 +446,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,      [],			'MUST',			0,],
 						['MAY',				\&Parse_ABNF_oids,      [],			'MAY',			0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_ObjectClasses,
 				},
 		lc('attributeTypes') => {
 				'ParseTable' => [
@@ -432,7 +464,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
 						['USAGE',			\&Parse_ABNF_usage,	'userApplications',	'USAGE',		0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_AttributeTypes,
 				},
 		lc('matchingRules') => {
 				'ParseTable' => [
@@ -442,7 +474,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
 						['SYNTAX',			\&Parse_ABNF_numoid,	[],			'SYNTAX',		1,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('matchingRuleUse') => {
 				'ParseTable' => [
@@ -452,14 +484,14 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
 						['APPLIES',			\&Parse_ABNF_oids,	[],			'APPLIES',		1,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('ldapSyntaxes') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('dITContentRules') => {
 				'ParseTable' => [
@@ -472,7 +504,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						['NOT',				\&Parse_ABNF_oids,	[],			'NOT',			0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('dITStructureRules') => {
 				'ParseTable' => [
@@ -483,7 +515,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
 						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('nameForms') => {
 				'ParseTable' => [
@@ -495,7 +527,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			1,],
 						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						],
-				'Check' => \&Check_Pass,
+				'Check' => \&Check_Isolated_Pass,
 				},
 		);
 
