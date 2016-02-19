@@ -113,6 +113,51 @@ sub unwrap
 #######################################
 
 
+sub IsNumoid
+	{
+	my $oid = shift;
+
+	return ($oid =~ /^$RE_numoid$/) ? 1 : 0;
+	}
+
+
+sub CmpOids
+	{
+	my ($oidA, $oidB) = @_;
+
+	my $t;
+
+	if ($t = IsNumoid($oidB) <=> IsNumoid($oidA))
+		{
+		return $t;
+		}
+
+	my @A = split('\.', $oidA);
+	my @B = split('\.', $oidB);
+
+	while (scalar(@A) && scalar(@B))
+		{
+		my $a = shift @A;
+		my $b = shift @B;
+
+		if ($t = ($b =~ /[0-9]+/ <=> $a =~ /[0-9]+/))
+			{
+			return $t;
+			}
+
+		if ($t = ($a =~ /[0-9]+/) ? $a <=> $b : $a cmp $b)
+			{
+			return $t;
+			}
+		}
+
+	return scalar(@A) <=> scalar(@B);
+	}
+
+
+#######################################
+
+
 sub Parse_ABNF_extensions
 	{
 	my ($obj, $string) = @_;
