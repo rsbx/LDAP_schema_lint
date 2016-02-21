@@ -56,6 +56,10 @@ my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
 
 
 # State
+my %SchemaElements = ();
+my %Oids = ();
+my %Names = ();
+
 my $unwrap_state = undef;
 my $unwrap_state_line = 0;
 my $unwrap_curr_line = 0;
@@ -153,6 +157,17 @@ sub CmpOids
 		}
 
 	return scalar(@A) <=> scalar(@B);
+	}
+
+
+#######################################
+
+
+sub IsRuleID
+	{
+	my $ruleid = shift;
+
+	return ($ruleid =~ /^$RE_ruleid$/) ? 1 : 0;
 	}
 
 
@@ -471,12 +486,6 @@ sub Parse_RuleID
 	}
 
 
-sub Check_Isolated_Pass
-	{
-	return shift;
-	}
-
-
 sub Check_Isolated_ObjectClasses
 	{
 	my $obj = shift;
@@ -517,6 +526,40 @@ sub Check_Isolated_AttributeTypes
 	}
 
 
+#######################################
+
+
+sub Lookup_nameoid
+	{
+	my ($namespace, $nameoid) = @_;
+
+	if (IsNumoid($nameoid))
+		{
+		return exists($Oids{$nameoid}) ? $Oids{$nameoid} : [];
+		}
+	else
+		{
+		return exists($SchemaElements{$namespace}->{'Names'}->{$nameoid}) ? $SchemaElements{$namespace}->{'Names'}->{$nameoid} : [];
+		}
+	}
+
+
+sub Lookup_ruleid
+	{
+	my ($namespace, $ruleid) = @_;
+
+	if (!IsRuleID($ruleid))
+		{
+		return [];
+		}
+
+	return exists($SchemaElements{$namespace}->{'RuleIds'}->{$ruleid}) ? $SchemaElements{$namespace}->{'RuleIds'}->{$ruleid} : [];
+	}
+
+
+#######################################
+
+
 my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('objectClasses') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -532,7 +575,13 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			0,],
 						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						],
-				'Check' => \&Check_Isolated_ObjectClasses,
+				'Check_Isolated' => \&Check_Isolated_ObjectClasses,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SUP',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
 				},
 		lc('attributeTypes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -551,7 +600,15 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
 						['USAGE',			\&Parse_ABNF_usage,	'userApplications',	'USAGE',		0,],
 						],
-				'Check' => \&Check_Isolated_AttributeTypes,
+				'Check_Isolated' => \&Check_Isolated_AttributeTypes,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SUP',				\&Lookup_nameoid,	'attributeTypes',	],
+						['EQUALITY',			\&Lookup_nameoid,	'matchingRules',	],
+						['ORDERING',			\&Lookup_nameoid,	'matchingRules',	],
+						['SUBSTR',			\&Lookup_nameoid,	'matchingRules',	],
+						['-DSYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
+						],
 				},
 		lc('matchingRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -562,7 +619,11 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
 						['SYNTAX',			\&Parse_ABNF_numoid,	[],			'SYNTAX',		1,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
+						],
 				},
 		lc('matchingRuleUse') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -573,7 +634,11 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
 						['APPLIES',			\&Parse_ABNF_oids,	[],			'APPLIES',		1,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['APPLIES',			\&Lookup_nameoid,	'attributeTypes',	],
+						],
 				},
 		lc('ldapSyntaxes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -581,7 +646,10 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						#Field				Parser			Default			Key			Req
 						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						],
 				},
 		lc('dITContentRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -595,7 +663,14 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						['NOT',				\&Parse_ABNF_oids,	[],			'NOT',			0,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['AUX',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						['NOT',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
 				},
 		lc('dITStructureRules') => {
 				'ParseElementID' => [\&Parse_RuleID, '-RULEID'],
@@ -607,7 +682,12 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
 						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['FORM',			\&Lookup_nameoid,	'nameforms',		],
+						['SUP',				\&Lookup_ruleid,	'ditstructurerules',	],
+						],
 				},
 		lc('nameForms') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -620,7 +700,13 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			1,],
 						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						],
-				'Check' => \&Check_Isolated_Pass,
+				'Check_Isolated' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['OC',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
 				},
 		);
 
@@ -660,14 +746,17 @@ sub Parse_LDAP_RFC4512_Schema_Type
 		return undef;
 		}
 
-	return $parsetableref->{'Check'}($obj);
+	if (defined $parsetableref->{'Check_Isolated'})
+		{
+		$obj = $parsetableref->{'Check_Isolated'}($obj);
+		}
+
+	return $obj;
 	}
 
 
 #######################################
 
-
-my %SchemaElements = ();
 
 foreach my $key (keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 	{
@@ -719,10 +808,6 @@ while (@ARGV)
 
 
 # Basic schema element checks.
-
-my %Oids = ();
-my %Names = ();
-
 
 foreach my $key (sort keys %SchemaElements)
 	{
@@ -816,7 +901,7 @@ foreach my $name (sort keys %Names)
 		{
 		foreach my $elem (@{$SchemaElements{$key}->{'Names'}->{$name}})
 			{
-			say "\t'", $elem->{'-Type'},"'";
+			say "\t'", $elem->{'-Type'}, "'";
 			say "\t\tLine: ", $elem->{'-Defined'}->[1], " in file: '", $elem->{'-Defined'}->[0], "'";
 			}
 		}
@@ -824,6 +909,49 @@ foreach my $name (sort keys %Names)
 
 
 # Basic referenced schema element type checks
+
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	$key = lc($key);
+	my $refdtypetable = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_ReferencedTypeTable'};
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		foreach my $fieldrefchecktable (@{$refdtypetable})
+			{
+			my ($field, $lookup, $type) = @{$fieldrefchecktable};
+			$type = lc($type);
+
+			next if !exists $element->{$field};
+
+			foreach my $ref (@{$element->{$field}})
+				{
+				$ref = lc($ref);
+
+				my $targets = &{$lookup}($type, $ref);
+
+				if (!scalar(@{$targets}))
+					{
+					say "ERROR: Schema element of type '$type' not found referenced as '$ref':";
+					say "\t'", $element->{'-Type'}, "'";
+					say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+					next;
+					}
+
+				foreach my $target (@{&{$lookup}($type, $ref)})
+					{
+					if ($target->{'-Type'} ne $type)
+						{
+						say "ERROR: Found schema element type of '$target->{'-Type'}' instead of expected type of '$type' when referenced as '$ref':";
+						say "\t'", $element->{'-Type'}, "'";
+						say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+						}
+					}
+				}
+			}
+		}
+	}
 
 
 __END__
