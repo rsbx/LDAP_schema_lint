@@ -162,7 +162,7 @@ sub Parse_ABNF_extensions
 	{
 	my ($obj, $string) = @_;
 
-	$obj->{'X-'} = {};
+	$obj->{'-X'} = {};
 
 	while ($string =~ /^\s+X-([A-Za-z_-]+)\s+(\S.*)$/)
 		{
@@ -170,7 +170,7 @@ sub Parse_ABNF_extensions
 		$string = $2;
 		my $val;
 
-		if (exists($obj->{'X-'}->{$key}))
+		if (exists($obj->{'-X'}->{$key}))
 			{
 			return ();
 			}
@@ -180,7 +180,7 @@ sub Parse_ABNF_extensions
 			return ();
 			}
 
-		$obj->{'X-'}->{$key} = $val;
+		$obj->{'-X'}->{$key} = $val;
 		}
 
 	return $string;
@@ -416,7 +416,7 @@ sub Parse_TypeDescription
 
 	my $obj = {
 		'-Type'	=> $type,
-		'OID'	=> $1,
+		'-OID'	=> $1,
 		};
 	$value = $2;
 
@@ -468,9 +468,17 @@ sub Check_Isolated_AttributeTypes
 	{
 	my $obj = shift;
 
-	if (!scalar($obj->{'SUP'}) && !scalar($obj->{'SYNTAX'}))
+	if (!scalar(@{$obj->{'SUP'}}) && !scalar(@{$obj->{'-SYNTAXLEN'}}))
 		{
 		return undef;
+		}
+
+	$obj->{'-DSYNTAX'} = [];
+	$obj->{'-DLENMINMAX'} = undef;
+	if (scalar(@{$obj->{'-SYNTAXLEN'}}))
+		{
+		$obj->{'-DSYNTAX'} = [$obj->{'-SYNTAXLEN'}->[0]];
+		$obj->{'-DLENMINMAX'} = $obj->{'-SYNTAXLEN'}->[1];
 		}
 
 	return $obj;
@@ -503,7 +511,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['EQUALITY',			\&Parse_ABNF_oid,	[],			'EQALITY',		0,],
 						['ORDERING',			\&Parse_ABNF_oid,	[],			'ORDERING',		0,],
 						['SUBSTR',			\&Parse_ABNF_oid,	[],			'SUBSTR',		0,],
-						['SYNTAX',			\&Parse_ABNF_noidlen,	[],			'SYNTAX',		0,],
+						['SYNTAX',			\&Parse_ABNF_noidlen,	[],			'-SYNTAXLEN',		0,],
 						['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
 						['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
 						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
@@ -551,17 +559,17 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						],
 				'Check' => \&Check_Isolated_Pass,
 				},
-		lc('dITStructureRules') => {
-				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
-						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
-						],
-				'Check' => \&Check_Isolated_Pass,
-				},
+#		lc('dITStructureRules') => {
+#				'ParseTable' => [
+#						#Field				Parser			Default			Key			Req
+#						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+#						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
+#						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+#						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
+#						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
+#						],
+#				'Check' => \&Check_Isolated_Pass,
+#				},
 		lc('nameForms') => {
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
@@ -646,21 +654,27 @@ while (@ARGV)
 	}
 
 
+# Basic schema element type checks.
+
 my %Oids = ();
 my %Names = ();
 
 
 foreach my $key (sort keys %SchemaElements)
 	{
-	say scalar(@{$SchemaElements{$key}->{'Descriptions'}}), "\t'$key' elements defined";
+	say scalar(@{$SchemaElements{$key}->{'Descriptions'}}), "\t'$key' elements declared";
 
 	$SchemaElements{$key}->{'Names'} = {};
+	$SchemaElements{$key}->{'RuleIds'} = {};
 
 	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
 		{
-		my $oid = lc($element->{'OID'});
-		$Oids{$oid} = [] if !exists $Oids{$oid};
-		push @{$Oids{$oid}}, $element;
+		if (exists $element->{'-OID'})
+			{
+			my $oid = lc($element->{'-OID'});
+			$Oids{$oid} = [] if !exists $Oids{$oid};
+			push @{$Oids{$oid}}, $element;
+			}
 
 		if (exists $element->{'NAME'})
 			{
@@ -673,11 +687,14 @@ foreach my $key (sort keys %SchemaElements)
 				$Names{$name} = {} if !exists $Names{$name};
 				$Names{$name}->{$key} = 1;
 				}
-
 			}
 
+		if (exists $element->{'-RULEID'})
+			{
+			$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]} = [] if !exists $SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]};
+			push @{$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]}}, $element;
+			}
 		}
-
 	}
 
 
@@ -713,7 +730,6 @@ foreach my $key (sort keys %SchemaElements)
 foreach my $name (sort keys %Names)
 	{
 	next if scalar(keys %{$Names{$name}}) == 1;
-#say join(' ', $name, sort keys %{$Names{$name}});
 
 	say "WARNING: Name '$name' declared as multiple schema element types:";
 	foreach my $key (sort keys %{$Names{$name}})
@@ -725,6 +741,9 @@ foreach my $name (sort keys %Names)
 			}
 		}
 	}
+
+
+# Basic referenced schema element type checks
 
 
 __END__
@@ -861,8 +880,8 @@ for my $name (sort {$a cmp $b} keys %names)
 
 __END__
 
-attribute = (
-	OID		=>	$,	# required
+attributetypes = (
+	-OID		=>	$,	# required:		# oid
 	NAME		=>	[],	# optional: []		# strings
 	DESC		=>	$,	# optional: undef	# string
 	OBSOLETE	=>	bool,	# optional: false
@@ -870,27 +889,29 @@ attribute = (
 	EQUALITY	=>	[],	# optional: undef	# oid
 	ORDERING	=>	[],	# optional: undef	# oid
 	SUBSTR		=>	[],	# optional: undef	# oid
-	SYNTAX		=>	[[]],	# optional: undef	# oid
+	-SYNTAXLEN	=>	[[]],	# optional: undef	# oid
 	SINGLE-VALUE	=>	bool,	# optional: false
 	COLLECTIVE	=>	bool,	# optional: false
 	RO		=>	bool,	# optional: false
 	USAGE		=>	$,	# optional: 'userApplications'
-	Extensions	=>	{[]},	# optional: []		# hashrefs
-	-Defined	=>	[],	# schema file & line defined
-	-Type		=>	'attribute',
+	-DSYNTAX	=>	[],	# optional: []		# oid
+	-DLENMINMAX	=>	$,	# optional: undef	# number
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'attributetypes',
 
-	-EQUALITY	=>	$,	# defined or inherited value
-	-ORDERING	=>	$,	# defined or inherited value
-	-SUBSTR		=>	$,	# defined or inherited value
-	-SYNTAX		=>	$,	# defined or inherited value
+	-EQUALITY	=>	$,	# declared or inherited value
+	-ORDERING	=>	$,	# declared or inherited value
+	-SUBSTR		=>	$,	# declared or inherited value
+	-SYNTAX		=>	$,	# declared or inherited value
 
 	-TC_supers	=>	[],	# oids from SUP chain
 	-TC_schemas	=>	[],	# schema files transitive closure
 	);
 
 
-objectclass = (
-	OID		=>	$,	# required
+objectclasses = (
+	-OID		=>	$,	# required:		# oid
 	NAME		=>	[],	# optional: []		# strings
 	DESC		=>	$,	# optional: undef
 	OBSOLETE	=>	bool,	# optional: false
@@ -900,9 +921,9 @@ objectclass = (
 	AUXILIARY	=>	bool,	# optional: false
 	MUST		=>	[],	# optional: []		# oids
 	MAY		=>	[],	# optional: []		# oids
-	Extensions	=>	{[]},	# optional: []		# hashrefs
-	-Defined	=>	[],	# schema file & line defined
-	-Type		=>	'objectclass',
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'objectclasses',
 
 	-TC_supers	=>	[],	# oids from SUP chains
 	-TC_schemas	=>	[],	# schema files transitive closure
@@ -910,4 +931,78 @@ objectclass = (
 	-TC_mays	=>	[],	# oids, transitive closure
 	);
 
+
+matchingrules = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	SYNTAX		=>	[],	# required: []		# oid
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'matchingrules',
+	);
+
+
+matchingruleuse = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	APPLIES		=>	[],	# required: []		# oids
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'matchingruleuse',
+	);
+
+
+ldapsyntaxes = (
+	-OID		=>	$,	# required:		# oid
+	DESC		=>	$,	# optional: undef	# string
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ldapsyntaxes',
+	);
+
+
+ditcontentrules = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	AUX		=>	[],	# optional: []		# oids
+	MUST		=>	[],	# optional: []		# oids
+	MAY		=>	[],	# optional: []		# oids
+	NOT		=>	[],	# optional: []		# oids
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ditcontentrules',
+	);
+
+
+ditstructurerules = (
+	-RULEID		=>	[],	# required:		# numbers
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	FORM		=>	[],	# required:		# oid
+	SUP		=>	[],	# optional: []		# ruleids
+	-X		=>	{[]},	# optional: {[]}	# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ditstructurerules',
+	);
+
+
+nameforms = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false	
+	OC		=>	[],	# required: []		# oid
+	MUST		=>	[],	# required: []		# oids
+	MAY		=>	[],	# optional: []		# oids
+	-X		=>	{[]},	# optional: {[]}	# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'nameforms',
+	);
 
