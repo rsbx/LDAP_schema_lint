@@ -50,6 +50,7 @@ my $RE_numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
 my $RE_keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
 my $RE_nameoid = "(?:$RE_numoid|$RE_keystring)";
 my $RE_dstring = "(?:(?:\\\\27|\\\\5c|\\\\5C|[^'\\\\])+)";
+my $RE_ruleid = '(?:0|[1-9][0-9]*)';
 
 my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
 
@@ -358,6 +359,41 @@ sub Parse_ABNF_qdstrings
 	}
 
 
+sub Parse_ABNF_ruleids
+	{
+	my $ruleidstr = shift;
+
+	my @ruleids = ();
+	my $rest;
+
+	if ($ruleidstr =~ /^\s*\(\s*($RE_ruleid(?:\s*$RE_ruleid)*)\s*\)(\s.*$|$)/)
+		{
+		my $ruleids = $1;
+		$rest = $2;
+
+		$ruleids =~ s/\$/ /g;
+
+		while ($ruleids !~ /^\s*$/)
+			{
+			my $ruleid;
+			($ruleid, $ruleids) = $ruleids =~ /^\s*(\S+)(\s.*$|$)/;
+			push @ruleids, $ruleid;
+			}
+		}
+	elsif ($ruleidstr =~ /\s*($RE_ruleid)(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @ruleids, $1;
+		}
+	else
+		{
+		return ();
+		}
+
+	return ($rest, \@ruleids);
+	}
+
+
 sub Parse_ABNF_usage
 	{
 	my $string = shift;
@@ -405,37 +441,33 @@ sub TableParse
 	}
 
 
-sub Parse_TypeDescription
+sub Parse_TypeOid
 	{
-	my ($value, $table, $type) = @_;
+	my ($obj, $field, $string) = @_;
 
-	if ($value !~ /^\(\s*($RE_typeoid)((?:\s+\S+)*)\s*\)\s*$/)
+	if ($string !~ /^\s*($RE_typeoid)((?:\s+\S+)*)\s*$/)
 		{
 		return undef;
 		}
 
-	my $obj = {
-		'-Type'	=> $type,
-		'-OID'	=> $1,
-		};
-	$value = $2;
+	$obj->{$field} = $1;
 
-	if (!defined($value = TableParse($table, $obj, $value)))
+	return $2;
+	}
+
+
+sub Parse_RuleID
+	{
+	my ($obj, $field, $string) = @_;
+
+	if ($string !~ /^\s*($RE_ruleid)((?:\s+\S+)*)\s*$/)
 		{
 		return undef;
 		}
 
-	if (!defined($value = Parse_ABNF_extensions($obj, $value)))
-		{
-		return undef;
-		}
+	$obj->{$field} = $1;
 
-	if ($value !~ /^\s*$/)
-		{
-		return undef;
-		}
-
-	return $obj;
+	return $2;
 	}
 
 
@@ -453,7 +485,7 @@ sub Check_Isolated_ObjectClasses
 
 	if ($count == 0)
 		{
-		 $obj->{'-STRUCTURAL'} = 1;
+		$obj->{'-STRUCTURAL'} = 1;
 		}
 	elsif ($count != 1)
 		{
@@ -487,21 +519,23 @@ sub Check_Isolated_AttributeTypes
 
 my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('objectClasses') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						# Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,   [],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,  undef,			'DESC',			0,],
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SUP',				\&Parse_ABNF_oids,      [],			'SUP',			0,],
+						['SUP',				\&Parse_ABNF_oids,	[],			'SUP',			0,],
 						['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
 						['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
 						['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
-						['MUST',			\&Parse_ABNF_oids,      [],			'MUST',			0,],
-						['MAY',				\&Parse_ABNF_oids,      [],			'MAY',			0,],
+						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
 						],
 				'Check' => \&Check_Isolated_ObjectClasses,
 				},
 		lc('attributeTypes') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						# Field				Parser			Default			Key			Req
 						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
@@ -520,6 +554,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 				'Check' => \&Check_Isolated_AttributeTypes,
 				},
 		lc('matchingRules') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
@@ -530,6 +565,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('matchingRuleUse') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
@@ -540,6 +576,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('ldapSyntaxes') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
@@ -547,6 +584,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 				'Check' => \&Check_Isolated_Pass,
 				},
 		lc('dITContentRules') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
@@ -559,18 +597,20 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						],
 				'Check' => \&Check_Isolated_Pass,
 				},
-#		lc('dITStructureRules') => {
-#				'ParseTable' => [
-#						#Field				Parser			Default			Key			Req
-#						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-#						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-#						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-#						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
-#						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
-#						],
-#				'Check' => \&Check_Isolated_Pass,
-#				},
+		lc('dITStructureRules') => {
+				'ParseElementID' => [\&Parse_RuleID, '-RULEID'],
+				'ParseTable' => [
+						#Field				Parser			Default			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
+						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
+						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
+						],
+				'Check' => \&Check_Isolated_Pass,
+				},
 		lc('nameForms') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
 						#Field				Parser			Default			Key			Req
 						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
@@ -589,14 +629,38 @@ sub Parse_LDAP_RFC4512_Schema_Type
 	{
 	my ($key, $value, $parsetableref) = @_;
 
-	my $obj = Parse_TypeDescription($value, $parsetableref->{'ParseTable'}, $key);
+	my $obj = {
+		'-Type' => $key,
+		};
 
-	if (defined($obj))
+	if ($value !~ /^\((.*)\)\s*$/)
 		{
-		$obj = $parsetableref->{'Check'}($obj);
+		return undef;
 		}
 
-	return $obj;
+	$value = $1;
+
+	if (!defined($value = &{$parsetableref->{'ParseElementID'}->[0]}($obj, $parsetableref->{'ParseElementID'}->[1], $value)))
+		{
+		return undef;
+		}
+
+	if (!defined($value = TableParse($parsetableref->{'ParseTable'}, $obj, $value)))
+		{
+		return undef;
+		}
+
+	if (!defined($value = Parse_ABNF_extensions($obj, $value)))
+		{
+		return undef;
+		}
+
+	if ($value !~ /^\s*$/)
+		{
+		return undef;
+		}
+
+	return $parsetableref->{'Check'}($obj);
 	}
 
 
@@ -654,7 +718,7 @@ while (@ARGV)
 	}
 
 
-# Basic schema element type checks.
+# Basic schema element checks.
 
 my %Oids = ();
 my %Names = ();
@@ -685,14 +749,14 @@ foreach my $key (sort keys %SchemaElements)
 				push @{$SchemaElements{$key}->{'Names'}->{$name}}, $element;
 
 				$Names{$name} = {} if !exists $Names{$name};
-				$Names{$name}->{$key} = 1;
+				$Names{$name}->{$key} = undef;
 				}
 			}
 
 		if (exists $element->{'-RULEID'})
 			{
-			$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]} = [] if !exists $SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]};
-			push @{$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}->[0]}}, $element;
+			$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}} = [] if !exists $SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}};
+			push @{$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}}}, $element;
 			}
 		}
 	}
@@ -727,6 +791,22 @@ foreach my $key (sort keys %SchemaElements)
 	}
 
 
+foreach my $key (sort keys %SchemaElements)
+	{
+	foreach my $ruleid (sort keys %{$SchemaElements{$key}->{'RuleIds'}})
+		{
+		next if scalar(@{$SchemaElements{$key}->{'RuleIds'}->{$ruleid}}) == 1;
+
+		say "ERROR: RuleID '$ruleid' declared multiple times:";
+		foreach my $elem (@{$SchemaElements{$key}->{'RuleIds'}->{$ruleid}})
+			{
+			say "\t'", $elem->{'-Type'},"'";
+			say "\t\tLine: ", $elem->{'-Defined'}->[1], " in file: '", $elem->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
 foreach my $name (sort keys %Names)
 	{
 	next if scalar(keys %{$Names{$name}}) == 1;
@@ -747,6 +827,12 @@ foreach my $name (sort keys %Names)
 
 
 __END__
+
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+say Dumper($var1, ...);
+say '';
 
 
 #
@@ -798,9 +884,9 @@ sub inheritance_loop
 				$item->{'-TC_supers'} = [$item->{'OID'}];
 				$progress = 1;
 				}
-	
+
 			next if exists $item->{'-TC_supers'};
-	
+
 			my $supers = GetSupers($item->{'SUP'}, $type);
 			if (defined $supers)
 				{
@@ -810,7 +896,7 @@ sub inheritance_loop
 				}
 			push @remain, $item;
 			}
-	
+
 		@items = @remain;
 		} while $progress;
 
@@ -997,7 +1083,7 @@ nameforms = (
 	-OID		=>	$,	# required:		# oid
 	NAME		=>	[],	# optional: []		# strings
 	DESC		=>	$,	# optional: undef	# string
-	OBSOLETE	=>	bool,	# optional: false	
+	OBSOLETE	=>	bool,	# optional: false
 	OC		=>	[],	# required: []		# oid
 	MUST		=>	[],	# required: []		# oids
 	MAY		=>	[],	# optional: []		# oids
