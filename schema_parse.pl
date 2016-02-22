@@ -434,9 +434,9 @@ sub TableParse
 
 	for (my $i = 0; $i < scalar(@$table); $i++)
 		{
-		my ($field, $parser, $default, $key, $req) = @{$table->[$i]};
+		my ($field, $parser, $initializer, $key, $req) = @{$table->[$i]};
 
-		$obj->{$key} = $default;
+		$obj->{$key} = &$initializer;
 
 		if ($string =~ /^\s+$field(\s.*$|$)/)
 			{
@@ -564,16 +564,16 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('objectClasses') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						# Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SUP',				\&Parse_ABNF_oids,	[],			'SUP',			0,],
-						['ABSTRACT',			\&Return_1,		0,			'-ABSTRACT',		0,],
-						['STRUCTURAL',			\&Return_1,		0,			'-STRUCTURAL',		0,],
-						['AUXILIARY',			\&Return_1,		0,			'-AUXILIARY',		0,],
-						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			0,],
-						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
+						# Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SUP',				\&Parse_ABNF_oids,	sub{[]},			'SUP',			0,],
+						['ABSTRACT',			\&Return_1,		sub{0},				'-ABSTRACT',		0,],
+						['STRUCTURAL',			\&Return_1,		sub{0},				'-STRUCTURAL',		0,],
+						['AUXILIARY',			\&Return_1,		sub{0},				'-AUXILIARY',		0,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
 						],
 				'Check_Isolated' => \&Check_Isolated_ObjectClasses,
 				'Check_ReferencedTypeTable' => [
@@ -586,19 +586,19 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('attributeTypes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						# Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SUP',				\&Parse_ABNF_oid,	[],			'SUP',			0,],
-						['EQUALITY',			\&Parse_ABNF_oid,	[],			'EQALITY',		0,],
-						['ORDERING',			\&Parse_ABNF_oid,	[],			'ORDERING',		0,],
-						['SUBSTR',			\&Parse_ABNF_oid,	[],			'SUBSTR',		0,],
-						['SYNTAX',			\&Parse_ABNF_noidlen,	[],			'-SYNTAXLEN',		0,],
-						['SINGLE-VALUE',		\&Return_1,		0,			'SINGLE-VALUE',		0,],
-						['COLLECTIVE',			\&Return_1,		0,			'COLLECTIVE',		0,],
-						['NO-USER-MODIFICATION',	\&Return_1,		0,			'NO-USER-MODIFICATION',	0,],
-						['USAGE',			\&Parse_ABNF_usage,	'userApplications',	'USAGE',		0,],
+						# Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SUP',				\&Parse_ABNF_oid,	sub{[]},			'SUP',			0,],
+						['EQUALITY',			\&Parse_ABNF_oid,	sub{[]},			'EQALITY',		0,],
+						['ORDERING',			\&Parse_ABNF_oid,	sub{[]},			'ORDERING',		0,],
+						['SUBSTR',			\&Parse_ABNF_oid,	sub{[]},			'SUBSTR',		0,],
+						['SYNTAX',			\&Parse_ABNF_noidlen,	sub{[]},			'-SYNTAXLEN',		0,],
+						['SINGLE-VALUE',		\&Return_1,		sub{0},				'SINGLE-VALUE',		0,],
+						['COLLECTIVE',			\&Return_1,		sub{0},				'COLLECTIVE',		0,],
+						['NO-USER-MODIFICATION',	\&Return_1,		sub{0},				'NO-USER-MODIFICATION',	0,],
+						['USAGE',			\&Parse_ABNF_usage,	sub{'userApplications'},	'USAGE',		0,],
 						],
 				'Check_Isolated' => \&Check_Isolated_AttributeTypes,
 				'Check_ReferencedTypeTable' => [
@@ -613,11 +613,11 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('matchingRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['SYNTAX',			\&Parse_ABNF_numoid,	[],			'SYNTAX',		1,],
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SYNTAX',			\&Parse_ABNF_numoid,	sub{[]},			'SYNTAX',		1,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
@@ -628,11 +628,11 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('matchingRuleUse') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['APPLIES',			\&Parse_ABNF_oids,	[],			'APPLIES',		1,],
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['APPLIES',			\&Parse_ABNF_oids,	sub{[]},			'APPLIES',		1,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
@@ -643,8 +643,8 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('ldapSyntaxes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
+						#Field				Parser			Initializer			Key			Req
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
@@ -654,14 +654,14 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('dITContentRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['AUX',				\&Parse_ABNF_oids,	[],			'AUX',			0,],
-						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			0,],
-						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
-						['NOT',				\&Parse_ABNF_oids,	[],			'NOT',			0,],
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['AUX',				\&Parse_ABNF_oids,	sub{[]},			'AUX',			0,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
+						['NOT',				\&Parse_ABNF_oids,	sub{[]},			'NOT',			0,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
@@ -675,12 +675,12 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('dITStructureRules') => {
 				'ParseElementID' => [\&Parse_RuleID, '-RULEID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['FORM',			\&Parse_ABNF_oid,	[],			'FORM',			1,],
-						['SUP',				\&Parse_ABNF_ruleids,	[],			'SUP',			0,],
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['FORM',			\&Parse_ABNF_oid,	sub{[]},			'FORM',			1,],
+						['SUP',				\&Parse_ABNF_ruleids,	sub{[]},			'SUP',			0,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
@@ -692,13 +692,13 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 		lc('nameForms') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
 				'ParseTable' => [
-						#Field				Parser			Default			Key			Req
-						['NAME',			\&Parse_ABNF_qdescrs,	[],			'NAME',			0,],
-						['DESC',			\&Parse_ABNF_qdstring,	undef,			'DESC',			0,],
-						['OBSOLETE',			\&Return_1,		0,			'OBSOLETE',		0,],
-						['OC',				\&Parse_ABNF_oid,	[],			'OC',			1,],
-						['MUST',			\&Parse_ABNF_oids,	[],			'MUST',			1,],
-						['MAY',				\&Parse_ABNF_oids,	[],			'MAY',			0,],
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['OC',				\&Parse_ABNF_oid,	sub{[]},			'OC',			1,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			1,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
 						],
 				'Check_Isolated' => undef,
 				'Check_ReferencedTypeTable' => [
