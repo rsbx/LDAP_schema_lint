@@ -1,0 +1,121 @@
+# RFC-4512:
+
+#  Copyright (c) 2013-2016, Raymond S Brand
+#  All rights reserved.
+#  
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#  
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  
+#   * Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in
+#     the documentation and/or other materials provided with the
+#     distribution.
+#  
+#   * Redistributions in source or binary form must carry prominent
+#     notices of any modifications.
+#  
+#   * Neither the name of Raymond S Brand nor the names of its other
+#     contributors may be used to endorse or promote products derived
+#     from this software without specific prior written permission.
+#  
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+#  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+#  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+#  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+#  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+#  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+
+
+objectClasses: ( 2.5.6.0 NAME ( 'top' ) ABSTRACT MUST objectClass X-ORIGIN 'RFC 4512' X-DESC ( 'An abstract object class, as the name implies, provides a base of characteristics from which other object classes can be defined to inherit from. An entry cannot belong to an abstract object class unless it belongs to a structural or auxiliary class that inherits from that abstract class.' 'Abstract object classes cannot derive from structural or auxiliary object classes.' 'All structural object classes derive (directly or indirectly) from the "top" abstract object class. Auxiliary object classes do not necessarily derive from "top".' ) )
+
+
+objectClasses: ( 2.5.6.1 NAME 'alias' SUP top STRUCTURAL MUST aliasedObjectName X-ORIGIN 'RFC 4512' )
+
+
+attributeTypes: ( 2.5.4.1 NAME 'aliasedObjectName' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE X-ORIGIN 'RFC 4512' X-DESC ( 'The "aliasedObjectName" attribute holds the name of the entry an alias points to. The "aliasedObjectName" attribute is known as the "aliasedEntryName" attribute in X.500.' ) )
+
+
+attributeTypes: ( 2.5.4.0 NAME 'objectClass' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 X-ORIGIN 'RFC 4512' X-DESC ( 'The "objectClass" attribute specifies the object classes of an entry, which (among other things) are used in conjunction with the controlling schema to determine the permitted attributes of an entry. Values of this attribute can be modified by clients, but the "objectClass" attribute cannot be removed.' ) )
+
+
+attributeTypes: ( 2.5.18.3 NAME 'creatorsName' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute appears in entries that were added using the protocol (e.g., using the Add operation). The value is the distinguished name of the creator.' ) )
+
+
+attributeTypes: ( 2.5.18.1 NAME 'createTimestamp' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute appears in entries that were added using the protocol (e.g., using the Add operation). The value is the time the entry was added.' ) )
+
+
+attributeTypes: ( 2.5.18.4 NAME 'modifiersName' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute appears in entries that have been modified using the protocol (e.g., using the Modify operation). The value is the distinguished name of the last modifier.' ) )
+
+
+attributeTypes: ( 2.5.18.2 NAME 'modifyTimestamp' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute appears in entries that have been modified using the protocol (e.g., using the Modify operation). The value is the time the entry was last modified.' ) )
+
+
+attributeTypes: ( 2.5.21.9 NAME 'structuralObjectClass' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute indicates the structural object class of the entry.' ) )
+
+
+attributeTypes: ( 2.5.21.10 NAME 'governingStructureRule' EQUALITY integerMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'This attribute indicates the structure rule governing the entry.' ) )
+
+
+attributeTypes: ( 2.5.18.10 NAME 'subschemaSubentry' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'Subschema (sub)entries are used for administering information about the directory schema. A single subschema (sub)entry contains all schema definitions (see Section 4.1) used by entries in a particular part of the directory tree.' ) )
+
+
+objectClasses: ( 2.5.20.1 NAME 'subschema' AUXILIARY MAY ( dITStructureRules $ nameForms $ ditContentRules $ objectClasses $ attributeTypes $ matchingRules $ matchingRuleUse ) X-ORIGIN 'RFC 4512' )
+
+
+attributeTypes: ( 2.5.21.6 NAME 'objectClasses' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.37 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute holds definitions of object classes.' ) )
+
+
+attributeTypes: ( 2.5.21.5 NAME 'attributeTypes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute holds definitions of attribute types.' ) )
+
+
+attributeTypes: ( 2.5.21.4 NAME 'matchingRules' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.30 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute holds definitions of matching rules.' ) )
+
+
+attributeTypes: ( 2.5.21.8 NAME 'matchingRuleUse' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.31 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute holds definitions of matching rule uses.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute holds definitions of LDAP syntaxes.' ) )
+
+
+attributeTypes: ( 2.5.21.2 NAME 'dITContentRules' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.16 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute lists DIT Content Rules that are present in the subschema.' ) )
+
+
+attributeTypes: ( 2.5.21.1 NAME 'dITStructureRules' EQUALITY integerFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.17 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute lists DIT Structure Rules that are present in the subschema.' ) )
+
+
+attributeTypes: ( 2.5.21.7 NAME 'nameForms' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.35 USAGE directoryOperation X-ORIGIN 'RFC 4512' X-DESC ( 'This attribute lists Name Forms that are in force. ' ) )
+
+
+objectClasses: ( 1.3.6.1.4.1.1466.101.120.111 NAME 'extensibleObject' SUP top AUXILIARY X-ORIGIN 'RFC 4512' X-DESC ( 'The "extensibleObject" auxiliary object class allows entries that belong to it to hold any user attribute. The set of allowed attribute types of this object class is implicitly the set of all attribute types of userApplications usage.' 'The mandatory attributes of the other object classes of this entry are still required to be present, and any precluded attributes are still not allowed to be present.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.6 NAME 'altServer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "altServer" attribute lists URIs referring to alternative servers that may be contacted when this server becomes unavailable. URIs for servers implementing the LDAP are written according to [RFC4516].' 'Other kinds of URIs may be provided. If the server does not know of any other servers that could be used, this attribute will be absent. Clients may cache this information in case their preferred server later becomes unavailable.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.5 NAME 'namingContexts' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "namingContexts" attribute lists the context prefixes of the naming contexts the server masters or shadows (in part or in whole). If the server is a first-level DSA [X.501], it should list (in addition) an empty string (indicating the root of the DIT). If the server does not master or shadow any information (e.g., it is an LDAP gateway to a public X.500 directory) this attribute will be absent. If the server believes it masters or shadows the entire directory, the attribute will have a single value, and that value will be the empty string (indicating the root of the DIT).' 'This attribute may be used, for example, to select a suitable entry name for subsequent operations with this server.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.13 NAME 'supportedControl' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "supportedControl" attribute lists object identifiers identifying the request controls [RFC4511] the server supports. If the server does not support any request controls, this attribute will be absent. Object identifiers identifying response controls need not be listed.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.7 NAME 'supportedExtension' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "supportedExtension" attribute lists object identifiers identifying the extended operations [RFC4511] that the server supports. If the server does not support any extended operations, this attribute will be absent.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.4203.1.3.5 NAME 'supportedFeatures' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "supportedFeatures" attribute lists object identifiers identifying elective features that the server supports. If the server does not support any discoverable elective features, this attribute will be absent.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.15 NAME 'supportedLDAPVersion' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "supportedLDAPVersion" attribute lists the versions of LDAP that the server supports.' ) )
+
+
+attributeTypes: ( 1.3.6.1.4.1.1466.101.120.14 NAME 'supportedSASLMechanisms' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 USAGE dSAOperation X-ORIGIN 'RFC 4512' X-DESC ( 'The "supportedSASLMechanisms" attribute lists the SASL mechanisms [RFC4422] that the server recognizes and/or supports [RFC4513]. The contents of this attribute may depend on the current session state. If the server does not support any SASL mechanisms, this attribute will not be present.' ) )
+
