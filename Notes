@@ -1,5 +1,12 @@
 Assumption:
 	There is only 1 namespace for oids.
+	This is correct as far as it goes; however, the different schema
+		element types use the first component OID to mean different
+		things.  e.g. The objectclasses and attributetypes schema
+		element types use the first component OID as an identifier
+		for type being defined; and the matchingruleuse and
+		ditcontentrules schema element types use the first component
+		OID to identify the schema element to be augmented.
 	Authority:
 
 Assumption:
