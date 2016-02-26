@@ -59,6 +59,7 @@ my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
 my %SchemaElements = ();
 my %Oids = ();
 my %Names = ();
+my @InheritanceReady = ();
 
 my $unwrap_state = undef;
 my $unwrap_state_line = 0;
@@ -145,12 +146,7 @@ sub CmpOids
 		my $a = shift @A;
 		my $b = shift @B;
 
-		if ($t = ($b =~ /^[0-9]+/ <=> $a =~ /^[0-9]+/))
-			{
-			return $t;
-			}
-
-		if ($t = ($a =~ /^[0-9]+/) ? $a <=> $b : $a cmp $b)
+		if ($t = ($a =~ /^[0-9]+/) ? $a <=> $b : lc($a) cmp lc($b))
 			{
 			return $t;
 			}
@@ -538,7 +534,7 @@ sub Check_Referenced_ObjectClasses
 		# ABSTRACT may only inherit from ABSTRACT.
 		foreach my $nameoid (@{$obj->{'SUP'}})
 			{
-			foreach my $sup (@{Lookup_nameoid(lc('objectClasses'), $nameoid)})
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
 				{
 				if (!$sup->{'-ABSTRACT'})
 					{
@@ -559,7 +555,7 @@ sub Check_Referenced_ObjectClasses
 		# STRUCTURAL may only inherit from STRUCTURAL or ABSTRACT.
 		foreach my $nameoid (@{$obj->{'SUP'}})
 			{
-			foreach my $sup (@{Lookup_nameoid(lc('objectClasses'), $nameoid)})
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
 				{
 				if (!$sup->{'-ABSTRACT'} && !$sup->{'-STRUCTURAL'})
 					{
@@ -574,7 +570,7 @@ sub Check_Referenced_ObjectClasses
 		# AUXILIARY only inherit from AUXILIARY or ABSTRACT.
 		foreach my $nameoid (@{$obj->{'SUP'}})
 			{
-			foreach my $sup (@{Lookup_nameoid(lc('objectClasses'), $nameoid)})
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
 				{
 				if (!$sup->{'-ABSTRACT'} && !$sup->{'-AUXILIARY'})
 					{
@@ -600,7 +596,7 @@ sub Check_Referenced_AttributeTypes
 
 	foreach my $nameoid (@{$obj->{'SUP'}})
 		{
-		foreach my $sup (@{Lookup_nameoid(lc('attributeTypes'), $nameoid)})
+		foreach my $sup (@{Lookup_nameoid('attributeTypes', $nameoid)})
 			{
 			# USAGE must match supertype USAGE.
 			if ($obj->{'USAGE'} ne $sup->{'USAGE'})
@@ -627,7 +623,7 @@ sub Check_Referenced_DITContentRules
 	{
 	my $obj = shift;
 
-	foreach my $oc (@{Lookup_nameoid(lc('objectClasses'), $obj->{'-OCOID'})})
+	foreach my $oc (@{Lookup_nameoid('objectClasses', $obj->{'-OCOID'})})
 		{
 		if (!$oc->{'-STRUCTURAL'})
 			{
@@ -637,7 +633,7 @@ sub Check_Referenced_DITContentRules
 
 	foreach my $nameoid (@{$obj->{'AUX'}})
 		{
-		foreach my $oc (@{Lookup_nameoid(lc('objectClasses'), $nameoid)})
+		foreach my $oc (@{Lookup_nameoid('objectClasses', $nameoid)})
 			{
 			if (!$oc->{'-AUXILIARY'})
 				{
@@ -656,7 +652,7 @@ sub Check_Referenced_NameForms
 
 	foreach my $nameoid (@{$obj->{'OC'}})
 		{
-		foreach my $oc (@{Lookup_nameoid(lc('objectClasses'), $nameoid)})
+		foreach my $oc (@{Lookup_nameoid('objectClasses', $nameoid)})
 			{
 			if (!$oc->{'-STRUCTURAL'})
 				{
@@ -682,7 +678,7 @@ sub Lookup_nameoid
 		}
 	else
 		{
-		return exists($SchemaElements{$namespace}->{'Names'}->{$nameoid}) ? $SchemaElements{$namespace}->{'Names'}->{$nameoid} : [];
+		return exists($SchemaElements{lc($namespace)}->{'Names'}->{lc($nameoid)}) ? $SchemaElements{lc($namespace)}->{'Names'}->{lc($nameoid)} : [];
 		}
 	}
 
@@ -696,7 +692,64 @@ sub Lookup_ruleid
 		return [];
 		}
 
-	return exists($SchemaElements{$namespace}->{'RuleIds'}->{$ruleid}) ? $SchemaElements{$namespace}->{'RuleIds'}->{$ruleid} : [];
+	return exists($SchemaElements{lc($namespace)}->{'RuleIds'}->{$ruleid}) ? $SchemaElements{lc($namespace)}->{'RuleIds'}->{$ruleid} : [];
+	}
+
+
+#######################################
+
+
+sub MaxPlusOne
+	{
+	my ($selfval, $depsvals) = @_;
+	my $val = -1;
+
+	foreach my $depval (@{$depsvals})
+		{
+		$val = ($depval > $val) ? $depval : $val;
+		}
+
+	return $val+1;
+	}
+
+
+sub NameoidsUnion
+	{
+	my ($selfval, $depsvals, $lookup, $type) = @_;
+	my %seen = ();
+	my @union = ();
+
+	foreach my $nameoidlist ($selfval, @{$depsvals})
+		{
+		foreach my $nameoid (@{$nameoidlist})
+			{
+			foreach my $element (@{&{$lookup}($type, $nameoid)})
+				{
+				next if exists $seen{$element};
+
+				push @union, $nameoid;
+				$seen{$element} = undef;
+				}
+			}
+		}
+
+	return [sort {CmpOids($a, $b)} @union];
+	}
+
+
+sub SetIfEmpty
+	{
+	my ($selfval, $depsvals) = @_;
+
+	foreach my $list ($selfval, @{$depsvals})
+		{
+		if (scalar(@{$list}))
+			{
+			return $list;
+			}
+		}
+
+	return [];
 	}
 
 
@@ -718,14 +771,39 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			0,],
 						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
 						],
-				'Check_Isolated' => \&Check_Isolated_ObjectClasses,
+				'ParseSpecial' => undef,
+				'Check_Parse' => \&Check_Isolated_ObjectClasses,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['SUP',				\&Lookup_nameoid,	'objectClasses',	],
 						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
 						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
 						],
-				'Check_Referenced_Special' => \&Check_Referenced_ObjectClasses,
+				'Check_Referenced' => \&Check_Referenced_ObjectClasses,
+				'Inheritance' => {
+						'PrepTable' => [
+								#Field			Initializer
+								['-SUP-DEPTH',		sub{0},		],
+								['-TC-SUP',		'SUP',		],
+								['-TC-MUST',		'MUST',		],
+								['-TC-MAY',		'MAY',		],
+								],
+						'PrepSpecial' => undef,
+						'SourceTable' => [
+								#Field			Lookup			Type
+								['SUP',			\&Lookup_nameoid,	'objectClasses',	],
+								],
+						'SourceSpecial' => undef,
+						'ActionTable' => [
+								#Field			Source		Action			Additional parameters
+								['-SUP-DEPTH',		'-SUP-DEPTH',	\&MaxPlusOne,								],
+								['-TC-SUP',		'-TC-SUP',	\&NameoidsUnion,	\&Lookup_nameoid,	'objectClasses',	],
+								['-TC-MUST',		'-TC-MUST',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								['-TC-MAY',		'-TC-MAY',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								],
+						'ActionSpecial' => undef,
+						'Check' => undef,
+						},
 				},
 		lc('attributeTypes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -735,7 +813,7 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
 						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
 						['SUP',				\&Parse_ABNF_oid,	sub{[]},			'SUP',			0,],
-						['EQUALITY',			\&Parse_ABNF_oid,	sub{[]},			'EQALITY',		0,],
+						['EQUALITY',			\&Parse_ABNF_oid,	sub{[]},			'EQUALITY',		0,],
 						['ORDERING',			\&Parse_ABNF_oid,	sub{[]},			'ORDERING',		0,],
 						['SUBSTR',			\&Parse_ABNF_oid,	sub{[]},			'SUBSTR',		0,],
 						['SYNTAX',			\&Parse_ABNF_noidlen,	sub{[]},			'-SYNTAXLEN',		0,],
@@ -744,7 +822,8 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['NO-USER-MODIFICATION',	\&Return_1,		sub{0},				'NO-USER-MODIFICATION',	0,],
 						['USAGE',			\&Parse_ABNF_usage,	sub{'userApplications'},	'USAGE',		0,],
 						],
-				'Check_Isolated' => \&Check_Isolated_AttributeTypes,
+				'ParseSpecial' => undef,
+				'Check_Parse' => \&Check_Isolated_AttributeTypes,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['SUP',				\&Lookup_nameoid,	'attributeTypes',	],
@@ -753,7 +832,36 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['SUBSTR',			\&Lookup_nameoid,	'matchingRules',	],
 						['-DSYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
 						],
-				'Check_Referenced_Special' => \&Check_Referenced_AttributeTypes,
+				'Check_Referenced' => \&Check_Referenced_AttributeTypes,
+				'Inheritance' => {
+						'PrepTable' => [
+								#Field			Initializer
+								['-SUP-DEPTH',		sub{0},		],
+								['-TC-SUP',		'SUP',		],
+								['-EQUALITY',		'EQUALITY',	],
+								['-ORDERING',		'ORDERING',	],
+								['-SUBSTR',		'SUBSTR',	],
+								['-SYNTAX',		'-DSYNTAX',	],
+								['-LENMINMAX',		'-DLENMINMAX',	],
+								],
+						'PrepSpecial' => undef,
+						'SourceTable' => [
+								#Field			Lookup			Type
+								['SUP',			\&Lookup_nameoid,	'attributeTypes',	],
+								],
+						'SourceSpecial' => undef,
+						'ActionTable' => [
+								#Field			Source		Action			Additional parameters
+								['-SUP-DEPTH',		'-SUP-DEPTH',	\&MaxPlusOne,								],
+								['-TC-SUP',		'-TC-SUP',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								['-EQUALITY',		'-EQUALITY',	\&SetIfEmpty,								],
+								['-ORDERING',		'-ORDERING',	\&SetIfEmpty,								],
+								['-SUBSTR',		'-SUBSTR',	\&SetIfEmpty,								],
+								['-SYNTAX',		'-SYNTAX',	\&SetIfEmpty,								],
+								],
+						'ActionSpecial' => undef,
+						'Check' => undef,
+						},
 				},
 		lc('matchingRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -764,12 +872,14 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
 						['SYNTAX',			\&Parse_ABNF_numoid,	sub{[]},			'SYNTAX',		1,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['SYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
 						],
-				'Check_Referenced_Special' => undef,
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
 				},
 		lc('matchingRuleUse') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-MROID'],
@@ -780,13 +890,15 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
 						['APPLIES',			\&Parse_ABNF_oids,	sub{[]},			'APPLIES',		1,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['-MROID',			\&Lookup_nameoid,	'matchingRules',	],
 						['APPLIES',			\&Lookup_nameoid,	'attributeTypes',	],
 						],
-				'Check_Referenced_Special' => undef,
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
 				},
 		lc('ldapSyntaxes') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -794,11 +906,13 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						#Field				Parser			Initializer			Key			Req
 						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						],
-				'Check_Referenced_Special' => undef,
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
 				},
 		lc('dITContentRules') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OCOID'],
@@ -812,7 +926,8 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
 						['NOT',				\&Parse_ABNF_oids,	sub{[]},			'NOT',			0,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['-OCOID',			\&Lookup_nameoid,	'objectClasses',	],
@@ -821,7 +936,8 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
 						['NOT',				\&Lookup_nameoid,	'attributeTypes',	],
 						],
-				'Check_Referenced_Special' => \&Check_Referenced_DITContentRules,
+				'Check_Referenced' => \&Check_Referenced_DITContentRules,
+				'Inheritance' => undef,
 				},
 		lc('dITStructureRules') => {
 				'ParseElementID' => [\&Parse_RuleID, '-RULEID'],
@@ -833,13 +949,15 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['FORM',			\&Parse_ABNF_oid,	sub{[]},			'FORM',			1,],
 						['SUP',				\&Parse_ABNF_ruleids,	sub{[]},			'SUP',			0,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['FORM',			\&Lookup_nameoid,	'nameforms',		],
 						['SUP',				\&Lookup_ruleid,	'ditstructurerules',	],
 						],
-				'Check_Referenced_Special' => undef,
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
 				},
 		lc('nameForms') => {
 				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
@@ -852,14 +970,16 @@ my %Table_LDAP_RFC4512_Schema_Type_Parse = (
 						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			1,],
 						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
 						],
-				'Check_Isolated' => undef,
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
 				'Check_ReferencedTypeTable' => [
 						#Field				Lookup			Type
 						['OC',				\&Lookup_nameoid,	'objectClasses',	],
 						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
 						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
 						],
-				'Check_Referenced_Special' => \&Check_Referenced_NameForms,
+				'Check_Referenced' => \&Check_Referenced_NameForms,
+				'Inheritance' => undef,
 				},
 		);
 
@@ -899,9 +1019,9 @@ sub Parse_LDAP_RFC4512_Schema_Type
 		return undef;
 		}
 
-	if (defined $parsetableref->{'Check_Isolated'})
+	if (defined $parsetableref->{'Check_Parse'})
 		{
-		$obj = $parsetableref->{'Check_Isolated'}($obj);
+		$obj = $parsetableref->{'Check_Parse'}($obj);
 		}
 
 	return $obj;
@@ -937,7 +1057,7 @@ while (@ARGV)
 			{
 			my $obj;
 			if (!defined($obj = Parse_LDAP_RFC4512_Schema_Type(
-					lc($attribute),
+					$attribute,
 					$value,
 					$Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)},
 					)))
@@ -982,12 +1102,12 @@ foreach my $key (sort keys %SchemaElements)
 			{
 			foreach my $name (@{$element->{'NAME'}})
 				{
-				$name = lc($name);
-				$SchemaElements{$key}->{'Names'}->{$name} = [] if !exists $SchemaElements{$key}->{'Names'}->{$name};
-				push @{$SchemaElements{$key}->{'Names'}->{$name}}, $element;
+				my $lcname = lc($name);
+				$SchemaElements{$key}->{'Names'}->{$lcname} = [] if !exists $SchemaElements{$key}->{'Names'}->{$lcname};
+				push @{$SchemaElements{$key}->{'Names'}->{$lcname}}, $element;
 
-				$Names{$name} = {} if !exists $Names{$name};
-				$Names{$name}->{$key} = undef;
+				$Names{$lcname} = {} if !exists $Names{$lcname};
+				$Names{$lcname}->{$key} = undef;
 				}
 			}
 
@@ -1073,14 +1193,12 @@ foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 		foreach my $fieldrefchecktable (@{$refdtypetable})
 			{
 			my ($field, $lookup, $type) = @{$fieldrefchecktable};
-			$type = lc($type);
+			$type = $type;
 
 			next if !exists $element->{$field};
 
 			foreach my $ref (@{$element->{$field}})
 				{
-				$ref = lc($ref);
-
 				my $targets = &{$lookup}($type, $ref);
 
 				if (!scalar(@{$targets}))
@@ -1093,7 +1211,7 @@ foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 
 				foreach my $target (@{&{$lookup}($type, $ref)})
 					{
-					if ($target->{'-Type'} ne $type)
+					if (lc($target->{'-Type'}) ne lc($type))
 						{
 						say "ERROR: Found schema element type of '$target->{'-Type'}' instead of expected type of '$type' when referenced as '$ref':";
 						say "\t'", $element->{'-Type'}, "'";
@@ -1108,7 +1226,7 @@ foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 
 foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 	{
-	my $checker = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_Referenced_Special'};
+	my $checker = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_Referenced'};
 	next if !defined $checker;
 
 	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
@@ -1123,6 +1241,162 @@ foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 	}
 
 
+# Inheritance preparation
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		$element->{'-INH-DEPS'} = {};
+		$element->{'-INH-RDEPS'} = {};
+
+		if (defined $inheritspec->{'PrepTable'})
+			{
+			foreach my $row (@{$inheritspec->{'PrepTable'}})
+				{
+				my ($field, $initializer, @additional) = @{$row};
+
+				if (ref($initializer) eq 'CODE')
+					{
+					$element->{$field} = &{$initializer}(@additional);
+					}
+				else
+					{
+					$element->{$field} = $element->{$initializer};
+					}
+				}
+			}
+
+		if (defined $inheritspec->{'PrepSpecial'})
+			{
+			&{$inheritspec->{'PrepSpecial'}}($element);
+			}
+		}
+	}
+
+
+# Inheritance mark deps
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (defined $inheritspec->{'SourceTable'})
+			{
+			foreach my $source (@{$inheritspec->{'SourceTable'}})
+				{
+				my ($field, $lookup, $type) = @{$source};
+					{
+					next if !defined $element->{$field};
+
+					foreach my $dep (@{$element->{$field}})
+						{
+						foreach my $target (@{&{$lookup}($type, $dep)})
+							{
+							$element->{'-INH-DEPS'}->{$target} = $target;
+							$target->{'-INH-RDEPS'}->{$element} = $element;
+							}
+						}
+					}
+				}
+			}
+
+		if (defined $inheritspec->{'SourceSpecial'})
+			{
+			foreach my $target (&{$inheritspec->{'SourceSpecial'}}($element))
+				{
+				$element->{'-INH-DEPS'}->{$target} = $target;
+				$target->{'-INH-RDEPS'}->{$element} = $element;
+				}
+			}
+
+		$element->{'-INH-REMAIN'} = scalar(keys %{$element->{'-INH-DEPS'}});
+
+		if (!$element->{'-INH-REMAIN'})
+			{
+			push @InheritanceReady, $element;
+			}
+		}
+	}
+
+
+# Inheritance
+
+while (scalar @InheritanceReady)
+	{
+	my $element = shift @InheritanceReady;
+	my $key = lc($element->{'-Type'});
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+
+	if (defined $inheritspec->{'ActionTable'})
+		{
+		foreach my $row (@{$inheritspec->{'ActionTable'}})
+			{
+			my ($field, $source, $action, @additional) = @{$row};
+			my @inheritarray = ();
+
+			foreach my $dep (values %{$element->{'-INH-DEPS'}})
+				{
+				push @inheritarray, $dep->{$source};
+				}
+
+			$element->{$field} = &{$action}($element->{$source}, \@inheritarray, @additional);
+			}
+		}
+
+	if (defined $inheritspec->{'ActionSpecial'})
+		{
+		&{$inheritspec->{'ActionSpecial'}}($element, $element->{'-INH-DEPS'});
+		}
+
+	foreach my $rdep (values %{$element->{'-INH-RDEPS'}})
+		{
+		$rdep->{'-INH-REMAIN'}--;
+
+		if (!$rdep->{'-INH-REMAIN'})
+			{
+			push @InheritanceReady, $rdep;
+			}
+		}
+
+	if (defined $inheritspec->{'Check'})
+		{
+		&{$inheritspec->{'Check'}}($element);
+		}
+
+	delete $element->{'-INH-DEPS'};
+	delete $element->{'-INH-RDEPS'};
+	delete $element->{'-INH-REMAIN'};
+	}
+
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (exists $element->{'-INH-DEPS'})
+			{
+			delete $element->{'-INH-DEPS'};
+			delete $element->{'-INH-RDEPS'};
+			delete $element->{'-INH-REMAIN'};
+
+			say "ERROR: Circular supertype dependancy:";
+			say "\t'", $element->{'-Type'}, "'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
 __END__
 
 
@@ -1130,122 +1404,6 @@ use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 say Dumper($var1, ...);
 say '';
-
-
-#
-# Inheritance loops
-#
-
-
-sub GetSupers
-	{
-	my ($aref, $type) = @_;
-	my @supers = ();
-	my @sups = ();
-
-	for my $sup (@{$aref})
-		{
-		push @sups, @{$oids{lc $sup}} if exists $oids{lc $sup};
-		push @sups, @{$names{lc $sup}} if exists $names{lc $sup};
-		}
-
-	for my $item (@sups)
-		{
-		next if lc($type) ne lc($item->{'-Type'});
-		return undef unless exists $item->{'-TC_supers'};
-		push @supers, @{$item->{'-TC_supers'}};
-		}
-
-	return \@supers;
-	}
-
-
-sub inheritance_loop
-	{
-	my ($aref, $type) = @_;
-
-	my $progress;
-	my @remain;
-	my @items = @{$aref};
-
-	do
-		{
-		$progress = 0;
-		@remain = ();
-
-		while (@items)
-			{
-			my $item = shift @items;
-			if (!defined $item->{'SUP'})
-				{
-				$item->{'-TC_supers'} = [$item->{'OID'}];
-				$progress = 1;
-				}
-
-			next if exists $item->{'-TC_supers'};
-
-			my $supers = GetSupers($item->{'SUP'}, $type);
-			if (defined $supers)
-				{
-				$item->{'-TC_supers'} = [sort keys %{{map { (lc($_) => undef) } @{$supers}, $item->{'OID'}}}];
-				$progress = 1;
-				next;
-				}
-			push @remain, $item;
-			}
-
-		@items = @remain;
-		} while $progress;
-
-	return \@remain;
-	}
-
-
-my $remain = inheritance_loop(\@objcs, 'objectclass');
-if (@{$remain})
-	{
-	say "Objectclass circular or missing SUP definitions";
-	for my $item (@{$remain})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
-
-$remain = inheritance_loop(\@attrs, 'attribute');
-if (@{$remain})
-	{
-	say "Attribute circular or missing SUP definitions";
-	for my $item (@{$remain})
-		{
-		say "\t",$item->{'-Type'};
-		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-		}
-	}
-
-
-
-
-
-#for my $name (sort {$a cmp $b} keys %names)
-#	{
-#	say "NAME '$name' defined:";
-#	for my $item (@{$names{$name}})
-#		{
-#		say "\t",$item->{'-Type'};
-#		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-#		}
-#	}
-
-#for my $oid (sort {$a cmp $b} keys %oids)
-#	{
-#	say "OID '$oid' defined:";
-#	for my $item (@{$oids{$oid}})
-#		{
-#		say "\t",$item->{'-Type'};
-#		say "\t\tLine ",$item->{'-Defined'}->[1]," of '",$item->{'-Defined'}->[0],"'";
-#		}
-#	}
 
 
 for my $name (sort {$a cmp $b} keys %names)
@@ -1283,13 +1441,18 @@ attributetypes = (
 	-Defined	=>	[],	# schema file & line declared
 	-Type		=>	'attributetypes',
 
-	-EQUALITY	=>	$,	# declared or inherited value
-	-ORDERING	=>	$,	# declared or inherited value
-	-SUBSTR		=>	$,	# declared or inherited value
-	-SYNTAX		=>	$,	# declared or inherited value
+	-EQUALITY	=>	[],	# declared or inherited value
+	-ORDERING	=>	[],	# declared or inherited value
+	-SUBSTR		=>	[],	# declared or inherited value
+	-SYNTAX		=>	[],	# declared or inherited value
+	-LENMINMAX	=>	$,	# declared or inherited value
+	-SUP-DEPTH	=>	$,	# max distance from root element
 
-	-TC_supers	=>	[],	# oids from SUP chain
-	-TC_schemas	=>	[],	# schema files transitive closure
+	-TC-SUP		=>	[],	# oids from SUP chain
+
+	-INH-DEPS	=>	{},	# dependencies hashrefs
+	-INH-RDEPS	=>	{},	# reverse dependencies hashrefs
+	-INH-REMAIN	=>	$,	# dependencies remaining
 	);
 
 
@@ -1308,10 +1471,15 @@ objectclasses = (
 	-Defined	=>	[],	# schema file & line declared
 	-Type		=>	'objectclasses',
 
-	-TC_supers	=>	[],	# oids from SUP chains
-	-TC_schemas	=>	[],	# schema files transitive closure
-	-TC_musts	=>	[],	# oids, transitive closure
-	-TC_mays	=>	[],	# oids, transitive closure
+	-SUP-DEPTH	=>	$,	# max distance from root element
+
+	-TC-SUP		=>	[],	# oids from SUP chains
+	-TC-MUST	=>	[],	# oids, transitive closure
+	-TC-MAY		=>	[],	# oids, transitive closure
+
+	-INH-DEPS	=>	{},	# dependencies hashrefs
+	-INH-RDEPS	=>	{},	# reverse dependencies hashrefs
+	-INH-REMAIN	=>	$,	# dependencies remaining
 	);
 
 
