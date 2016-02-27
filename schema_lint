@@ -87,8 +87,6 @@ sub unwrap
 		{
 		chomp;
 		$unwrap_curr_line++;
-		next if $_ =~ /^\s*#/;
-		next if $_ =~ /^\s*$/;
 
 		if ($_ !~ /^ / && defined $unwrap_state)
 			{
