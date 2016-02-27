@@ -1,0 +1,265 @@
+# RFC-2252
+
+#  Copyright (c) 2016, Raymond S Brand
+#  All rights reserved.
+#  
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#  
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  
+#   * Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in
+#     the documentation and/or other materials provided with the
+#     distribution.
+#  
+#   * Redistributions in source or binary form must carry prominent
+#     notices of any modifications.
+#  
+#   * Neither the name of Raymond S Brand nor the names of its other
+#     contributors may be used to endorse or promote products derived
+#     from this software without specific prior written permission.
+#  
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+#  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+#  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+#  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+#  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+#  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+
+
+#attributetypes: ( 2.5.18.1 NAME 'createTimestamp' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'This attribute SHOULD appear in entries which were created using the Add operation.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.18.2 NAME 'modifyTimestamp' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'This attribute SHOULD appear in entries which have been modified using the Modify operation.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.18.3 NAME 'creatorsName' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'This attribute SHOULD appear in entries which were created using the Add operation.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.18.4 NAME 'modifiersName' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'This attribute SHOULD appear in entries which have been modified using the Modify operation.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.18.10 NAME 'subschemaSubentry' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation X-DESC ( 'The value of this attribute is the name of a subschema entry (or subentry if the server is based on X.500(93)) in which the server makes available attributes specifying the schema.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.5 NAME 'attributeTypes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation X-DESC ( 'This attribute is typically located in the subschema entry.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.6 NAME 'objectClasses' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.37 USAGE directoryOperation X-DESC ( 'This attribute is typically located in the subschema entry.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.4 NAME 'matchingRules' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.30 USAGE directoryOperation X-DESC ( 'This attribute is typically located in the subschema entry.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.8 NAME 'matchingRuleUse' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.31 USAGE directoryOperation X-DESC ( 'This attribute is typically located in the subschema entry.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.5 NAME 'namingContexts' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 USAGE dSAOperation X-DESC ( 'The values of this attribute correspond to naming contexts which this server masters or shadows. If the server does not master any information (e.g. it is an LDAP gateway to a public X.500 directory) this attribute will be absent. If the server believes it contains the entire directory, the attribute will have a single value, and that value will be the empty string (indicating the null DN of the root). This attribute will allow a client to choose suitable base objects for searching when it has contacted a server.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.6 NAME 'altServer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 USAGE dSAOperation X-DESC ( 'The values of this attribute are URLs of other servers which may be contacted when this server becomes unavailable. If the server does not know of any other servers which could be used this attribute will be absent. Clients may cache this information in case their preferred LDAP server later becomes unavailable.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.7 NAME 'supportedExtension' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 USAGE dSAOperation X-DESC ( 'The values of this attribute are OBJECT IDENTIFIERs identifying the supported extended operations which the server supports.' 'If the server does not support any extensions this attribute will be absent.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.13 NAME 'supportedControl' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 USAGE dSAOperation X-DESC ( 'The values of this attribute are the OBJECT IDENTIFIERs identifying controls which the server supports. If the server does not support any controls, this attribute will be absent.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.14 NAME 'supportedSASLMechanisms' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 USAGE dSAOperation X-DESC ( 'The values of this attribute are the names of supported SASL mechanisms which the server supports. If the server does not support any mechanisms this attribute will be absent.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.15 NAME 'supportedLDAPVersion' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 USAGE dSAOperation X-DESC ( 'The values of this attribute are the versions of the LDAP protocol which the server implements.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation X-DESC ( 'Servers MAY use this attribute to list the syntaxes which are implemented. Each value corresponds to one syntax.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.1 NAME 'dITStructureRules' EQUALITY integerFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.17 USAGE directoryOperation X-DESC ( 'This attribute is located in the subschema entry. All servers SHOULD recognize the name, although typically only X.500 servers will implement the functionality.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.7 NAME 'nameForms' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.35 USAGE directoryOperation X-DESC ( 'This attribute is located in the subschema entry. All servers SHOULD recognize the name, although typically only X.500 servers will implement the functionality.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#attributetypes: ( 2.5.21.2 NAME 'dITContentRules' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.16 USAGE directoryOperation X-DESC ( 'This attribute is located in the subschema entry. All servers SHOULD recognize the name, although typically only X.500 servers will implement the functionality.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.3 DESC 'Attribute Type Description' X-DESC ( 'Values in this syntax are encoded according to the BNF given at the start of section 4.2 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.5 DESC 'Binary' X-DESC ( 'Values in this syntax are encoded as described in section 4.3.1 of RFC 2252.' ) X-ORIGIN 'RFC 2252' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.6 DESC 'Bit String' X-DESC ( 'Values in this syntax are encoded according to the following BNF:' '    bitstring = "\27" *binary-digit "\27B"' '    binary-digit = "0" / "1"' 'Example:' '    \270101111101\27B' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.7 DESC 'Boolean' X-DESC ( 'Values in this syntax are encoded according to the following BNF:' '    boolean = "TRUE" / "FALSE"' 'Boolean values have an encoding of "TRUE" if they are logically true, and have an encoding of "FALSE" otherwise.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.8 DESC 'Certificate' X-DESC ( 'Because of the changes from X.509(1988) and X.509(1993) and additional changes to the ASN.1 definition to support certificate extensions, no string representation is defined, and values in this syntax MUST only be transferred using the binary encoding, by requesting or returning the attributes with descriptions "userCertificate;binary" or "caCertificate;binary". The BNF notation in RFC 1778 for "User Certificate" is not recommended to be used.' ) X-ORIGIN 'RFC 2252' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.9 DESC 'Certificate List' X-DESC ( 'Because of the incompatibility of the X.509(1988) and X.509(1993) definitions of revocation lists, values in this syntax MUST only be transferred using a binary encoding, by requesting or returning the attributes with descriptions "certificateRevocationList;binary" or "authorityRevocationList;binary". The BNF notation in RFC 1778 for "Authority Revocation List" is not recommended to be used.' ) X-ORIGIN 'RFC 2252' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.10 DESC 'Certificate Pair' X-DESC ( 'Because the Certificate is being carried in binary, values in this syntax MUST only be transferred using a binary encoding, by requesting or returning the attribute description "crossCertificatePair;binary". The BNF notation in RFC 1778 for "Certificate Pair" is not recommended to be used.' ) X-ORIGIN 'RFC 2252' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.11 DESC 'Country String' X-DESC ( 'A value in this syntax is encoded the same as a value of Directory String syntax. Note that this syntax is limited to values of exactly two printable string characters, as listed in ISO 3166.' 'CountryString = p p' 'Example:' '    US' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.12 DESC 'DN' X-DESC ( 'Values in the Distinguished Name syntax are encoded to have the representation defined in RFC 2253. Note that this representation is not reversible to an ASN.1 encoding used in X.500 for Distinguished Names, as the CHOICE of any DirectoryString element in an RDN is no longer known.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' X-DESC ( 'A string in this syntax is encoded in the UTF-8 form of ISO 10646 (a superset of Unicode). Servers and clients MUST be prepared to receive encodings of arbitrary Unicode characters, including characters not presently assigned to any character set.' 'For characters in the PrintableString form, the value is encoded as the string value itself.' 'If it is of the TeletexString form, then the characters are transliterated to their equivalents in UniversalString, and encoded in UTF-8 RFC 2044.' 'If it is of the UniversalString or BMPString forms ISO/IEC 10646-1 : 1993 (With amendments), UTF-8 is used to encode them.' 'Note: the form of DirectoryString is not indicated in protocol unless the attribute value is carried in binary. Servers which convert to DAP MUST choose an appropriate form. Servers MUST NOT reject values merely because they contain legal Unicode characters outside of the range of printable ASCII.' 'Example:' '    This is a string of DirectoryString containing #!%#@' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.16 DESC 'DIT Content Rule Description' X-DESC ( 'Values in this syntax are encoded according to the following BNF. Implementors should note that future versions of this document may have expanded this BNF to include additional terms.' '    DITContentRuleDescription = "("' '        numericoid   ; Structural ObjectClass identifier' '        [ "NAME" qdescrs ]' '        [ "DESC" qdstring ]' '        [ "OBSOLETE" ]' '        [ "AUX" oids ]    ; Auxiliary ObjectClasses' '        [ "MUST" oids ]   ; AttributeType identifiers' '        [ "MAY" oids ]    ; AttributeType identifiers' '        [ "NOT" oids ]    ; AttributeType identifiers' '    ")"' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.22 DESC 'Facsimile Telephone Number' X-DESC ('Values in this syntax are encoded according to the following BNF:' '    fax-number    = printablestring [ "$" faxparameters ]' '    faxparameters = faxparm / ( faxparm "$" faxparameters )' '    faxparm = "twoDimensional" / "fineResolution" / "unlimitedLength" / "b4Length" / "a3Width" / "b4Width" / "uncompressed"' 'The first printablestring is the telephone number, based on ITU-T Rec. E.123 , and the faxparm tokens represent fax parameters.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.23 DESC 'Fax' X-DESC ( 'Values in this syntax are encoded as if they were octet strings containing Group 3 Fax images as defined in CCITT, Recommendation T.4.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' X-DESC ( 'Values in this syntax are encoded as printable strings, represented as specified in X.208. Note that the time zone must be specified. It is strongly recommended that GMT time be used. For example,' '    199412161032Z' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.26 DESC 'IA5 String' X-DESC ( 'The encoding of a value in this syntax is the string value itself.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'INTEGER' X-DESC ( 'Values in this syntax are encoded as the decimal representation of their values, with each decimal digit represented by the its character equivalent. So the number 1321 is represented by the character string "1321".' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-DESC ( 'Values in this syntax are encoded as strings containing JPEG images in the JPEG File Interchange Format (JFIF), as described in JPEG File Interchange Format (Version 1.02).' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.30 DESC 'Matching Rule Description' X-DESC ( 'Values of type matchingRules are encoded as strings according to the BNF given in section 4.5 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.31 DESC 'Matching Rule Use Description' X-DESC ( 'Values of type matchingRuleUse are encoded as strings according to the BNF given in section 4.5 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.33 DESC 'MHS OR Address' X-DESC ( 'Values in this syntax are encoded as strings, according to the format defined in RFC 1327.' ) X-ORIGIN 'RFC 2252' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.34 DESC 'Name And Optional UID' X-DESC ( 'Values in this syntax are encoded according to the following BNF:' '    NameAndOptionalUID = DistinguishedName [ "#" bitstring ]' 'Although the \27#\27 character may occur in a string representation of a distinguished name, no additional special quoting is done. This syntax has been added subsequent to RFC 1778.' 'Example:' '    1.3.6.1.4.1.1466.0=#04024869,O=Test,C=GB#\270101\27B' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.35 DESC 'Name Form Description' X-DESC ( 'Values in this syntax are encoded according to the following BNF. Implementors should note that future versions of this document may have expanded this BNF to include additional terms.' '    NameFormDescription = "(" whsp' '        numericoid whsp  ; NameForm identifier' '        [ "NAME" qdescrs ]' '        [ "DESC" qdstring ]' '        [ "OBSOLETE" whsp ]' '        "OC" woid         ; Structural ObjectClass' '        "MUST" oids       ; AttributeTypes' '        [ "MAY" oids ]    ; AttributeTypes' '    whsp ")"' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.36 DESC 'Numeric String' X-DESC ( 'The encoding of a string in this syntax is the string value itself.' 'Example:' '    1997' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.37 DESC 'Object Class Description' X-DESC ( 'Values in this syntax are encoded according to the BNF in section 4.4 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.38 DESC 'OID' X-DESC ( 'Values in the Object Identifier syntax are encoded according to the BNF in section 4.1 of RFC 2252 for "oid".' 'Example:' '    1.2.3.4' '    cn' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.39 DESC 'Other Mailbox' X-DESC ( 'Values in this syntax are encoded according to the following BNF:' '    otherMailbox = mailbox-type "$" mailbox' '    mailbox-type = printablestring' '    mailbox = <an encoded IA5 String>' 'In the above, mailbox-type represents the type of mail system in which the mailbox resides, for example "MCIMail"; and mailbox is the actual mailbox in the mail system defined by mailbox-type.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.41 DESC 'Postal Address' X-DESC ( 'Values in this syntax are encoded according to the following BNF:' '    postal-address = dstring *( "$" dstring )' 'In the above, each dstring component of a postal address value is encoded as a value of type Directory String syntax. Backslashes and dollar characters, if they occur in the component, are quoted as described in section 4.3. Many servers limit the postal address to six lines of up to thirty characters.' 'Example:' '    1234 Main St.$Anytown, CA 12345$USA' '    \5C241,000,000 Sweepstakes$PO Box 1000000$Anytown, CA 12345$USA' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.43 DESC 'Presentation Address' X-DESC ( 'Values in this syntax are encoded with the representation described in RFC 1278.' ) X-ORIGIN 'RFC 2252' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.44 DESC 'Printable String' X-DESC ( 'The encoding of a value in this syntax is the string value itself. PrintableString is limited to the characters in production p of section 4.1 of RFC 2252.' 'Example:' '    This is a PrintableString' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.50 DESC 'Telephone Number' X-DESC ( 'Values in this syntax are encoded as if they were Printable String types. Telephone numbers are recommended in X.520 to be in international form, as described in ITU-T Rec. E.123.' 'Example:' '    +1 512 305 0280' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.53 DESC 'UTC Time' X-DESC ( 'Values in this syntax are encoded as if they were printable strings with the strings containing a UTCTime value. This is historical; new attribute definitions SHOULD use GeneralizedTime instead.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.54 DESC 'LDAP Syntax Description' X-DESC ( 'Values in this syntax are encoded according to the BNF in section 4.3.3 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapsyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.17 DESC 'DIT Structure Rule Description' X-DESC ( 'Values with this syntax are encoded according to the following BNF:' '    DITStructureRuleDescription = "(" whsp' '        ruleidentifier whsp            ; DITStructureRule identifier' '        [ "NAME" qdescrs ]' '        [ "DESC" qdstring ]' '        [ "OBSOLETE" whsp ]' '        "FORM" woid whsp               ; NameForm' '        [ "SUP" ruleidentifiers whsp ] ; superior DITStructureRules' '    ")"' '    ruleidentifier = integer' '    ruleidentifiers = ruleidentifier | "(" whsp ruleidentifierlist whsp ")"' '    ruleidentifierlist = [ ruleidentifier *( ruleidentifier ) ]' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#objectclasses: ( 1.3.6.1.4.1.1466.101.120.111 NAME 'extensibleObject' SUP top AUXILIARY X-DESC ( 'The extensibleObject object class, if present in an entry, permits that entry to optionally hold any attribute. The MAY attribute list of this class is implicitly the set of all attributes.' 'The mandatory attributes of the other object classes of this entry are still required to be present.' 'Note that not all servers will implement this object class, and those which do not will reject requests to add entries which contain this object class, or modify an entry to add this object class.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#objectclasses: ( 2.5.20.1 NAME 'subschema' AUXILIARY MAY ( dITStructureRules $ nameForms $ ditContentRules $ objectClasses $ attributeTypes $ matchingRules $ matchingRuleUse ) X-DESC ( 'This object class is used in the subschema entry.' 'The ldapSyntaxes operational attribute may also be present in subschema entries.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4512' )
+
+
+#matchingrules: ( 2.5.13.0 NAME 'objectIdentifierMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.1 NAME 'distinguishedNameMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 X-DESC ( 'Multiple adjoining whitespace characters are treated the same as an individual space, and leading and trailing whitespace is ignored.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.8 NAME 'numericStringMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.36 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.11 NAME 'caseIgnoreListMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.41 X-DESC ( 'Multiple adjoining whitespace characters are treated the same as an individual space, and leading and trailing whitespace is ignored.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.14 NAME 'integerMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.16 NAME 'bitStringMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.6 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.20 NAME 'telephoneNumberMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.50 X-DESC ( 'Multiple adjoining whitespace characters are treated the same as an individual space, and leading and trailing whitespace is ignored.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+matchingrules: ( 2.5.13.22 NAME 'presentationAddressMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.43 X-ORIGIN 'RFC 2252' )
+
+
+#matchingrules: ( 2.5.13.23 NAME 'uniqueMemberMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+matchingrules: ( 2.5.13.24 NAME 'protocolInformationMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.42 X-ORIGIN 'RFC 2252' )
+
+
+#matchingrules: ( 2.5.13.27 NAME 'generalizedTimeMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 1.3.6.1.4.1.1466.109.114.1 NAME 'caseExactIA5Match' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 X-DESC ( 'Multiple adjoining whitespace characters are treated the same as an individual space, and leading and trailing whitespace is ignored.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 1.3.6.1.4.1.1466.109.114.2 NAME 'caseIgnoreIA5Match' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 X-DESC ( 'Multiple adjoining whitespace characters are treated the same as an individual space, and leading and trailing whitespace is ignored.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.28 NAME 'generalizedTimeOrderingMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.3 NAME 'caseIgnoreOrderingMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 X-DESC ( 'The sort ordering for a caseIgnoreOrderingMatch is implementation- dependent.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#ldapSyntaxes: ( 1.3.6.1.4.1.1466.115.121.1.58 DESC 'Substring Assertion' X-DESC ( 'The Substring Assertion syntax is used only as the syntax of assertion values in the extensible match. It is not used as the syntax of attributes, or in the substring filter.' 'The Substring Assertion is encoded according to the following BNF:' '    substring = [initial] any [final]' '    initial = value' '    any = "*" *(value "*")' '    final = value' 'The <value> production is UTF-8 encoded string. Should the backslash or asterix characters be present in a production of <value>, they are quoted as described in section 4.3 of RFC 2252.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.4 NAME 'caseIgnoreSubstringsMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.58 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.21 NAME 'telephoneNumberSubstringsMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.58 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.10 NAME 'numericStringSubstringsMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.58 X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.29 NAME 'integerFirstComponentMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 X-DESC ( 'Implementors should note that the assertion syntax of these matching rules, an INTEGER or OID, is different from the value syntax of attributes for which this is the equality matching rule.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
+
+#matchingrules: ( 2.5.13.30 NAME 'objectIdentifierFirstComponentMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 X-DESC ( 'Implementors should note that the assertion syntax of these matching rules, an INTEGER or OID, is different from the value syntax of attributes for which this is the equality matching rule.' 'If the client supplies an extensible filter using an objectIdentifierFirstComponentMatch whose matchValue is in the "descr" form, and the OID is not recognized by the server, then the filter is Undefined.' ) X-ORIGIN 'RFC 2252' X-SUPERSEDED 'RFC 4517' )
+
