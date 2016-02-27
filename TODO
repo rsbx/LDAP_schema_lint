@@ -1,6 +1,8 @@
-Add README file.
-
 Refactor error reporting.
 
 Make duplicate detection code non/less magical.
+
+General code cleanup.
+
+Additional and/or updated RFC schema files.
 

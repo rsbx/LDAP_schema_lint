@@ -1,0 +1,9 @@
+schema_lint is a static LDAP schema checker.
+
+It only checks that the LDAP schema is itself is complete and standards
+compliant; it does not check directory contents against the schema.
+
+To use it, execute it with a list of schema source files as the command
+arguments.  The contents of each file should be the schema specification
+attributes in LDIF format; unrecognized content is ignored.  The "schema"
+directory has some samples to experiment with.
