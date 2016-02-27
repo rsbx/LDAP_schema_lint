@@ -1,0 +1,34 @@
+Assumption:
+	There is only 1 namespace for oids.
+	This is correct as far as it goes; however, the different schema
+		element types use the first component OID to mean different
+		things.  e.g. The objectclasses and attributetypes schema
+		element types use the first component OID as an identifier
+		for type being defined; and the matchingruleuse and
+		ditcontentrules schema element types use the first component
+		OID to identify the schema element to be augmented.
+	Authority:
+
+Assumption:
+	The first name in the NAME field list is the prefered name.
+	Authority:
+
+Confirmed:
+	Names, AKA short names or descriptors, are compared ignoring case.
+	Authority: RFC-4512 Section 1.4
+
+Confirmed:
+	Each schema type permitting optional names (ObjectClass,
+		AttributeType, MatchingRule, MatchingRuleUse, DITContentRule,
+		DITStructureRule, NameForm) is a separate namespace.
+	Authority: RFC-4512 Section 6.2
+
+Confirmed:
+	Names are prefered over oids.
+	Authority: RFC-4512 Section 1.4
+
+Confirmed:
+	ObjectClasses default to STRUCTURAL unless otherwise indicated.
+	Authority: RFC-4512 Section 4.1.1
+
+

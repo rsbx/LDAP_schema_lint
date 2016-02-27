@@ -1,0 +1,1633 @@
+#!/usr/bin/perl
+
+#  Copyright (c) 2013-2016, Raymond S Brand
+#  All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#
+#   * Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in
+#     the documentation and/or other materials provided with the
+#     distribution.
+#
+#   * Redistributions in source or binary form must carry prominent
+#     notices of any modifications.
+#
+#   * Neither the name of Raymond S Brand nor the names of its other
+#     contributors may be used to endorse or promote products derived
+#     from this software without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+#  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+#  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+#  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+#  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+#  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+
+
+use 5.10.1;
+use strict;
+use warnings;
+
+
+# Settings
+my $RelaxedTypeOid = 1;
+
+
+# Constants
+my $RE_numoid = '(?:(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)';
+my $RE_keystring = '(?:[A-Za-z][A-Za-z0-9-]*)';
+my $RE_nameoid = "(?:$RE_numoid|$RE_keystring)";
+my $RE_dstring = "(?:(?:\\\\27|\\\\5c|\\\\5C|[^'\\\\])+)";
+my $RE_ruleid = '(?:0|[1-9][0-9]*)';
+
+my $RE_typeoid = $RelaxedTypeOid ? $RE_nameoid : $RE_numoid;
+
+
+# State
+my %SchemaElements = ();
+my %Oids = ();
+my %Names = ();
+my @InheritanceReady = ();
+
+my $unwrap_state = undef;
+my $unwrap_state_line = 0;
+my $unwrap_curr_line = 0;
+my $unwrap_fh = '';
+
+sub unwrap
+	{
+	my $th = shift;
+
+	if ($th ne $unwrap_fh)
+		{
+		if (defined $unwrap_state)
+			{
+			my $r = $unwrap_state;
+			$unwrap_state = undef;
+			return ($r, $unwrap_state_line);
+			}
+
+		$unwrap_fh = $th;
+		$unwrap_curr_line = 0;
+		}
+
+	while (<$th>)
+		{
+		chomp;
+		$unwrap_curr_line++;
+		next if $_ =~ /^\s*#/;
+		next if $_ =~ /^\s*$/;
+
+		if ($_ !~ /^ / && defined $unwrap_state)
+			{
+			my ($r, $l) = ($unwrap_state, $unwrap_state_line);
+			($unwrap_state, $unwrap_state_line) =
+					($_, $unwrap_curr_line);
+			return ($r, $l);
+			}
+
+		if ($_ !~ /^ /)
+			{
+			$unwrap_state = $_;
+			$unwrap_state_line = $unwrap_curr_line;
+			}
+		else
+			{
+			$unwrap_state .= substr($_, 1);
+			}
+		}
+
+	my ($r, $l) = ($unwrap_state, $unwrap_state_line);
+	$unwrap_state = undef;
+	$unwrap_state_line = 0;
+	return ($r, $l);
+	}
+
+
+#######################################
+
+
+sub IsNumoid
+	{
+	my $oid = shift;
+
+	return ($oid =~ /^$RE_numoid$/) ? 1 : 0;
+	}
+
+
+sub CmpOids
+	{
+	my ($oidA, $oidB) = @_;
+
+	my $t;
+
+	if ($t = IsNumoid($oidB) <=> IsNumoid($oidA))
+		{
+		return $t;
+		}
+
+	my @A = split('\.', $oidA);
+	my @B = split('\.', $oidB);
+
+	while (scalar(@A) && scalar(@B))
+		{
+		my $a = shift @A;
+		my $b = shift @B;
+
+		if ($t = ($a =~ /^[0-9]+/) ? $a <=> $b : lc($a) cmp lc($b))
+			{
+			return $t;
+			}
+		}
+
+	return scalar(@A) <=> scalar(@B);
+	}
+
+
+#######################################
+
+
+sub IsRuleID
+	{
+	my $ruleid = shift;
+
+	return ($ruleid =~ /^$RE_ruleid$/) ? 1 : 0;
+	}
+
+
+#######################################
+
+
+sub Parse_ABNF_extensions
+	{
+	my ($obj, $string) = @_;
+
+	$obj->{'-X'} = {};
+
+	while ($string =~ /^\s+X-([A-Za-z_-]+)\s+(\S.*)$/)
+		{
+		my $key = $1;
+		$string = $2;
+		my $val;
+
+		if (exists($obj->{'-X'}->{$key}))
+			{
+			return ();
+			}
+
+		if (!scalar(($string, $val) = Parse_ABNF_qdstrings($string)))
+			{
+			return ();
+			}
+
+		$obj->{'-X'}->{$key} = $val;
+		}
+
+	return $string;
+	}
+
+
+sub Parse_ABNF_noidlen
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_numoid)((?:\{(?:0|[1-9][0-9]*)\})?(?:\s.*$|$))/)
+		{
+		return ();
+		}
+
+	my $oid = [$1];
+	$string = $2;
+
+	if ($string =~ /^\{(0|[1-9][0-9]*)\}(\s.*$|$)/)
+		{
+		push @$oid, $1;
+		$string = $2;
+		}
+
+	return ($string, $oid);
+	}
+
+
+sub Parse_ABNF_numoid
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_numoid)(\s.*$|$)/)
+		{
+		return ();
+		}
+
+	return ($2, [$1]);
+	}
+
+
+sub Parse_ABNF_oid
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*($RE_nameoid)(\s.*$|$)/)
+		{
+		return ();
+		}
+
+	return ($2, [$1]);
+	}
+
+
+sub Parse_ABNF_oids
+	{
+	my $oidstr = shift;
+
+	my @oids = ();
+	my $rest;
+
+	if ($oidstr =~ /^\s*\(\s*($RE_nameoid(?:\s*\$\s*$RE_nameoid)*)\s*\)(\s.*$|$)/)
+		{
+		my $oids = $1;
+		$rest = $2;
+
+		$oids =~ s/\$/ /g;
+
+		while ($oids !~ /^\s*$/)
+			{
+			my $oid;
+			($oid, $oids) = $oids =~ /^\s*(\S+)(\s.*$|$)/;
+			push @oids, $oid;
+			}
+		}
+	elsif ($oidstr =~ /\s*($RE_nameoid)(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @oids, $1;
+		}
+	else
+		{
+		return ();
+		}
+
+	return ($rest, \@oids);
+	}
+
+
+sub Parse_ABNF_qdescrs
+	{
+	my $string = shift;
+
+	my @qdescrs = ();
+	my $rest;
+
+	if ($string =~ /^\s*\(\s*('$RE_keystring'(\s+'$RE_keystring')*)\s*\)(\s.*$|$)/)
+		{
+		my $descr;
+		my $qdescrlist = $1;
+		$rest = $3;
+
+		while ($qdescrlist !~ /^\s*$/)
+			{
+			($descr, $qdescrlist) = $qdescrlist =~ /^\s*'($RE_keystring)'(.*$)/;
+			push @qdescrs, $descr;
+			}
+		}
+	elsif ($string =~ /^\s*'($RE_keystring)'(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @qdescrs, $1;
+		}
+	else
+		{
+		return ();
+		}
+
+	return ($rest, \@qdescrs);
+	}
+
+
+sub Parse_ABNF_qdstring
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*'($RE_dstring)'(\s.*$|$)/)
+		{
+		return ();
+		}
+	my ($dstring, $rest) = ($1, $2);
+
+	$dstring =~ s/\\27/\'/g;
+	$dstring =~ s/\\5c|\\5C/\\/g;
+
+	return ($rest, $dstring);
+	}
+
+
+sub Parse_ABNF_qdstrings
+	{
+	my $string = shift;
+
+	my @qdstrings = ();
+	my $rest;
+
+	if ($string =~ /^\s*\(\s*('$RE_dstring'(?:\s+'$RE_dstring')*)\s*\)(\s.*$|$)/)
+		{
+		my $dstring;
+		my $qdstringlist = $1;
+		$rest = $2;
+
+		while ($qdstringlist !~ /^\s*$/)
+			{
+			($dstring, $qdstringlist) = $qdstringlist =~ /^\s*'($RE_dstring)'(.*$)/;
+			$dstring =~ s/\\27/\'/g;
+			$dstring =~ s/\\5c|\\5C/\\/g;
+			push @qdstrings, $dstring;
+			}
+		}
+	elsif ($string =~ /^\s*'($RE_dstring)'(\s.*$|$)/)
+		{
+		my $dstring = $1;
+		$rest = $2;
+		$dstring =~ s/\\27/\'/g;
+		$dstring =~ s/\\5c|\\5C/\\/g;
+		push @qdstrings, $dstring;
+		}
+	else
+		{
+		return ();
+		}
+
+	return ($rest, \@qdstrings);
+	}
+
+
+sub Parse_ABNF_ruleids
+	{
+	my $ruleidstr = shift;
+
+	my @ruleids = ();
+	my $rest;
+
+	if ($ruleidstr =~ /^\s*\(\s*($RE_ruleid(?:\s*$RE_ruleid)*)\s*\)(\s.*$|$)/)
+		{
+		my $ruleids = $1;
+		$rest = $2;
+
+		$ruleids =~ s/\$/ /g;
+
+		while ($ruleids !~ /^\s*$/)
+			{
+			my $ruleid;
+			($ruleid, $ruleids) = $ruleids =~ /^\s*(\S+)(\s.*$|$)/;
+			push @ruleids, $ruleid;
+			}
+		}
+	elsif ($ruleidstr =~ /\s*($RE_ruleid)(\s.*$|$)/)
+		{
+		$rest = $2;
+		push @ruleids, $1;
+		}
+	else
+		{
+		return ();
+		}
+
+	return ($rest, \@ruleids);
+	}
+
+
+sub Parse_ABNF_usage
+	{
+	my $string = shift;
+
+	if ($string !~ /^\s*(userApplications|directoryOperation|distributedOperation|dSAOperation)(\s.*$|$)/)
+		{
+		return ();
+		}
+
+	return ($2, $1);
+	}
+
+
+sub Return_1
+	{
+	return ($_[0], 1);
+	}
+
+
+sub TableParse
+	{
+	my ($table, $obj, $string) = @_;
+
+	for (my $i = 0; $i < scalar(@$table); $i++)
+		{
+		my ($field, $parser, $initializer, $key, $req) = @{$table->[$i]};
+
+		$obj->{$key} = &$initializer;
+
+		if ($string =~ /^\s+$field(\s.*$|$)/)
+			{
+			my ($rest, $val);
+
+			if (!scalar(($rest, $val) = &$parser($1)))
+				{
+				return undef;
+				}
+
+			$obj->{$key} = $val;
+			$string = $rest;
+			}
+		}
+
+	return $string;
+	}
+
+
+sub Parse_TypeOid
+	{
+	my ($obj, $field, $string) = @_;
+
+	if ($string !~ /^\s*($RE_typeoid)((?:\s+\S+)*)\s*$/)
+		{
+		return undef;
+		}
+
+	$obj->{$field} = $1;
+
+	return $2;
+	}
+
+
+sub Parse_RuleID
+	{
+	my ($obj, $field, $string) = @_;
+
+	if ($string !~ /^\s*($RE_ruleid)((?:\s+\S+)*)\s*$/)
+		{
+		return undef;
+		}
+
+	$obj->{$field} = $1;
+
+	return $2;
+	}
+
+
+sub Check_Isolated_ObjectClasses
+	{
+	my $obj = shift;
+
+	my $count = $obj->{'-ABSTRACT'} + $obj->{'-STRUCTURAL'} + $obj->{'-AUXILIARY'};
+
+	if ($count == 0)
+		{
+		$obj->{'-STRUCTURAL'} = 1;
+		}
+	elsif ($count != 1)
+		{
+		return undef;
+		}
+
+	return $obj;
+	}
+
+
+sub Check_Isolated_AttributeTypes
+	{
+	my $obj = shift;
+
+	if (!scalar(@{$obj->{'SUP'}}) && !scalar(@{$obj->{'-SYNTAXLEN'}}))
+		{
+		return undef;
+		}
+
+	$obj->{'-DSYNTAX'} = [];
+	$obj->{'-DLENMINMAX'} = undef;
+	if (scalar(@{$obj->{'-SYNTAXLEN'}}))
+		{
+		$obj->{'-DSYNTAX'} = [$obj->{'-SYNTAXLEN'}->[0]];
+		$obj->{'-DLENMINMAX'} = $obj->{'-SYNTAXLEN'}->[1];
+		}
+
+	return $obj;
+	}
+
+
+#######################################
+
+
+sub Check_Referenced_ObjectClasses
+	{
+	my $obj = shift;
+
+	if ($obj->{'-ABSTRACT'})
+		{
+		# ABSTRACT may only inherit from ABSTRACT.
+		foreach my $nameoid (@{$obj->{'SUP'}})
+			{
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
+				{
+				if (!$sup->{'-ABSTRACT'})
+					{
+					return 0;
+					}
+				}
+			}
+		return 1;
+		}
+	elsif ($obj->{'-STRUCTURAL'})
+		{
+		# STRUCTURAL MUST inherit.
+		if (!scalar(@{$obj->{'SUP'}}))
+			{
+			return 0;
+			}
+
+		# STRUCTURAL may only inherit from STRUCTURAL or ABSTRACT.
+		foreach my $nameoid (@{$obj->{'SUP'}})
+			{
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
+				{
+				if (!$sup->{'-ABSTRACT'} && !$sup->{'-STRUCTURAL'})
+					{
+					return 0;
+					}
+				}
+			}
+		return 1;
+		}
+	elsif ($obj->{'-AUXILIARY'})
+		{
+		# AUXILIARY only inherit from AUXILIARY or ABSTRACT.
+		foreach my $nameoid (@{$obj->{'SUP'}})
+			{
+			foreach my $sup (@{Lookup_nameoid('objectClasses', $nameoid)})
+				{
+				if (!$sup->{'-ABSTRACT'} && !$sup->{'-AUXILIARY'})
+					{
+					return 0;
+					}
+				}
+			}
+		return 1;
+		}
+
+	return 0;
+	}
+
+
+sub Check_Referenced_AttributeTypes
+	{
+	my $obj = shift;
+
+	if (!scalar(@{$obj->{'SUP'}}))
+		{
+		return 1;
+		}
+
+	foreach my $nameoid (@{$obj->{'SUP'}})
+		{
+		foreach my $sup (@{Lookup_nameoid('attributeTypes', $nameoid)})
+			{
+			# USAGE must match supertype USAGE.
+			if ($obj->{'USAGE'} ne $sup->{'USAGE'})
+				{
+				return 0;
+				}
+
+			# Must be COLLECTIVE if supertype is COLLECTIVE.
+			if (!$obj->{'COLLECTIVE'} && $sup->{'COLLECTIVE'})
+				{
+				return 0;
+				}
+
+			# SYNTAX must be same of refinement of SYNTAX of supertype.
+			# Information required to check this is not part of the standard LDAP schema elements.
+			}
+		}
+
+	return 1;
+	}
+
+
+sub Check_Referenced_DITContentRules
+	{
+	my $obj = shift;
+
+	foreach my $oc (@{Lookup_nameoid('objectClasses', $obj->{'-OCOID'})})
+		{
+		if (!$oc->{'-STRUCTURAL'})
+			{
+			return 0;
+			}
+		}
+
+	foreach my $nameoid (@{$obj->{'AUX'}})
+		{
+		foreach my $oc (@{Lookup_nameoid('objectClasses', $nameoid)})
+			{
+			if (!$oc->{'-AUXILIARY'})
+				{
+				return 0;
+				}			
+			}
+		}
+
+	return 1;
+	}
+
+
+sub Check_Referenced_NameForms
+	{
+	my $obj = shift;
+
+	foreach my $nameoid (@{$obj->{'OC'}})
+		{
+		foreach my $oc (@{Lookup_nameoid('objectClasses', $nameoid)})
+			{
+			if (!$oc->{'-STRUCTURAL'})
+				{
+				return 0;
+				}
+			}
+		}
+
+	return 1;
+	}
+
+
+#######################################
+
+
+sub Check_Element_ObjectClasses
+	{
+	my $element = shift;
+
+	if ($element->{'-STRUCTURAL'})
+		{
+		my $top = Lookup_nameoid('objectClasses', '2.5.6.0')->[0];
+		my $found = 0;
+
+		foreach my $supertype (@{$element->{'-TC-SUP'}})
+			{
+			foreach my $superelement (@{Lookup_nameoid('objectClasses', $supertype)})
+				{
+				if ($superelement == $top)
+					{
+					$found = 1;
+					last;
+					}
+				}
+
+			if ($found)
+				{
+				last;
+				}
+			}
+
+		if (!$found)
+			{
+			say "ERROR: STRUCTURAL ObjectClasses must have 'top' (2.5.6.0) as a specified or inherited supertype:";
+			say "\t'", $element->{'-Type'},"'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+sub Check_Element_AttributeTypes
+	{
+	my $element = shift;
+
+	if (!scalar(@{$element->{'-SYNTAX'}}))
+		{
+		say "ERROR: AttributeTypes must have a specified or inherited SYNTAX property:";
+		say "\t'", $element->{'-Type'},"'";
+		say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+		}
+	}
+
+
+#######################################
+
+
+sub Lookup_nameoid
+	{
+	my ($namespace, $nameoid) = @_;
+
+	if (IsNumoid($nameoid))
+		{
+		return exists($Oids{$nameoid}) ? $Oids{$nameoid} : [];
+		}
+	else
+		{
+		return exists($SchemaElements{lc($namespace)}->{'Names'}->{lc($nameoid)}) ? $SchemaElements{lc($namespace)}->{'Names'}->{lc($nameoid)} : [];
+		}
+	}
+
+
+sub Lookup_ruleid
+	{
+	my ($namespace, $ruleid) = @_;
+
+	if (!IsRuleID($ruleid))
+		{
+		return [];
+		}
+
+	return exists($SchemaElements{lc($namespace)}->{'RuleIds'}->{$ruleid}) ? $SchemaElements{lc($namespace)}->{'RuleIds'}->{$ruleid} : [];
+	}
+
+
+#######################################
+
+
+sub MaxPlusOne
+	{
+	my ($selfval, $depsvals) = @_;
+	my $val = -1;
+
+	foreach my $depval (@{$depsvals})
+		{
+		$val = ($depval > $val) ? $depval : $val;
+		}
+
+	return $val+1;
+	}
+
+
+sub NameoidsUnion
+	{
+	my ($selfval, $depsvals, $lookup, $type) = @_;
+	my %seen = ();
+	my @union = ();
+
+	foreach my $nameoidlist ($selfval, @{$depsvals})
+		{
+		foreach my $nameoid (@{$nameoidlist})
+			{
+			foreach my $element (@{&{$lookup}($type, $nameoid)})
+				{
+				next if exists $seen{$element};
+
+				push @union, $nameoid;
+				$seen{$element} = undef;
+				}
+			}
+		}
+
+	return [sort {CmpOids($a, $b)} @union];
+	}
+
+
+sub SetIfEmpty
+	{
+	my ($selfval, $depsvals) = @_;
+
+	foreach my $list ($selfval, @{$depsvals})
+		{
+		if (scalar(@{$list}))
+			{
+			return $list;
+			}
+		}
+
+	return [];
+	}
+
+
+#######################################
+
+
+my %Table_LDAP_RFC4512_Schema_Type_Parse = (
+		lc('objectClasses') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
+				'ParseTable' => [
+						# Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SUP',				\&Parse_ABNF_oids,	sub{[]},			'SUP',			0,],
+						['ABSTRACT',			\&Return_1,		sub{0},				'-ABSTRACT',		0,],
+						['STRUCTURAL',			\&Return_1,		sub{0},				'-STRUCTURAL',		0,],
+						['AUXILIARY',			\&Return_1,		sub{0},				'-AUXILIARY',		0,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => \&Check_Isolated_ObjectClasses,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SUP',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
+				'Check_Referenced' => \&Check_Referenced_ObjectClasses,
+				'Inheritance' => {
+						'PrepTable' => [
+								#Field			Initializer
+								['-SUP-DEPTH',		sub{0},		],
+								['-TC-SUP',		'SUP',		],
+								['-TC-MUST',		'MUST',		],
+								['-TC-MAY',		'MAY',		],
+								],
+						'PrepSpecial' => undef,
+						'SourceTable' => [
+								#Field			Lookup			Type
+								['SUP',			\&Lookup_nameoid,	'objectClasses',	],
+								],
+						'SourceSpecial' => undef,
+						'ActionTable' => [
+								#Field			Source		Action			Additional parameters
+								['-SUP-DEPTH',		'-SUP-DEPTH',	\&MaxPlusOne,								],
+								['-TC-SUP',		'-TC-SUP',	\&NameoidsUnion,	\&Lookup_nameoid,	'objectClasses',	],
+								['-TC-MUST',		'-TC-MUST',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								['-TC-MAY',		'-TC-MAY',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								],
+						'ActionSpecial' => undef,
+						'Check' => undef,
+						},
+				'Check_Element' => \&Check_Element_ObjectClasses,
+				},
+		lc('attributeTypes') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
+				'ParseTable' => [
+						# Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SUP',				\&Parse_ABNF_oid,	sub{[]},			'SUP',			0,],
+						['EQUALITY',			\&Parse_ABNF_oid,	sub{[]},			'EQUALITY',		0,],
+						['ORDERING',			\&Parse_ABNF_oid,	sub{[]},			'ORDERING',		0,],
+						['SUBSTR',			\&Parse_ABNF_oid,	sub{[]},			'SUBSTR',		0,],
+						['SYNTAX',			\&Parse_ABNF_noidlen,	sub{[]},			'-SYNTAXLEN',		0,],
+						['SINGLE-VALUE',		\&Return_1,		sub{0},				'SINGLE-VALUE',		0,],
+						['COLLECTIVE',			\&Return_1,		sub{0},				'COLLECTIVE',		0,],
+						['NO-USER-MODIFICATION',	\&Return_1,		sub{0},				'NO-USER-MODIFICATION',	0,],
+						['USAGE',			\&Parse_ABNF_usage,	sub{'userApplications'},	'USAGE',		0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => \&Check_Isolated_AttributeTypes,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SUP',				\&Lookup_nameoid,	'attributeTypes',	],
+						['EQUALITY',			\&Lookup_nameoid,	'matchingRules',	],
+						['ORDERING',			\&Lookup_nameoid,	'matchingRules',	],
+						['SUBSTR',			\&Lookup_nameoid,	'matchingRules',	],
+						['-DSYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
+						],
+				'Check_Referenced' => \&Check_Referenced_AttributeTypes,
+				'Inheritance' => {
+						'PrepTable' => [
+								#Field			Initializer
+								['-SUP-DEPTH',		sub{0},		],
+								['-TC-SUP',		'SUP',		],
+								['-EQUALITY',		'EQUALITY',	],
+								['-ORDERING',		'ORDERING',	],
+								['-SUBSTR',		'SUBSTR',	],
+								['-SYNTAX',		'-DSYNTAX',	],
+								['-LENMINMAX',		'-DLENMINMAX',	],
+								],
+						'PrepSpecial' => undef,
+						'SourceTable' => [
+								#Field			Lookup			Type
+								['SUP',			\&Lookup_nameoid,	'attributeTypes',	],
+								],
+						'SourceSpecial' => undef,
+						'ActionTable' => [
+								#Field			Source		Action			Additional parameters
+								['-SUP-DEPTH',		'-SUP-DEPTH',	\&MaxPlusOne,								],
+								['-TC-SUP',		'-TC-SUP',	\&NameoidsUnion,	\&Lookup_nameoid,	'attributeTypes',	],
+								['-EQUALITY',		'-EQUALITY',	\&SetIfEmpty,								],
+								['-ORDERING',		'-ORDERING',	\&SetIfEmpty,								],
+								['-SUBSTR',		'-SUBSTR',	\&SetIfEmpty,								],
+								['-SYNTAX',		'-SYNTAX',	\&SetIfEmpty,								],
+								],
+						'ActionSpecial' => undef,
+						'Check' => undef,
+						},
+				'Check_Element' => \&Check_Element_AttributeTypes,
+				},
+		lc('matchingRules') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['SYNTAX',			\&Parse_ABNF_numoid,	sub{[]},			'SYNTAX',		1,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['SYNTAX',			\&Lookup_nameoid,	'ldapSyntaxes',		],
+						],
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		lc('matchingRuleUse') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-MROID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['APPLIES',			\&Parse_ABNF_oids,	sub{[]},			'APPLIES',		1,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['-MROID',			\&Lookup_nameoid,	'matchingRules',	],
+						['APPLIES',			\&Lookup_nameoid,	'attributeTypes',	],
+						],
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		lc('ldapSyntaxes') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						],
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		lc('dITContentRules') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OCOID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['AUX',				\&Parse_ABNF_oids,	sub{[]},			'AUX',			0,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			0,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
+						['NOT',				\&Parse_ABNF_oids,	sub{[]},			'NOT',			0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['-OCOID',			\&Lookup_nameoid,	'objectClasses',	],
+						['AUX',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						['NOT',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
+				'Check_Referenced' => \&Check_Referenced_DITContentRules,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		lc('dITStructureRules') => {
+				'ParseElementID' => [\&Parse_RuleID, '-RULEID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['FORM',			\&Parse_ABNF_oid,	sub{[]},			'FORM',			1,],
+						['SUP',				\&Parse_ABNF_ruleids,	sub{[]},			'SUP',			0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['FORM',			\&Lookup_nameoid,	'nameforms',		],
+						['SUP',				\&Lookup_ruleid,	'ditstructurerules',	],
+						],
+				'Check_Referenced' => undef,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		lc('nameForms') => {
+				'ParseElementID' => [\&Parse_TypeOid, '-OID'],
+				'ParseTable' => [
+						#Field				Parser			Initializer			Key			Req
+						['NAME',			\&Parse_ABNF_qdescrs,	sub{[]},			'NAME',			0,],
+						['DESC',			\&Parse_ABNF_qdstring,	sub{undef},			'DESC',			0,],
+						['OBSOLETE',			\&Return_1,		sub{0},				'OBSOLETE',		0,],
+						['OC',				\&Parse_ABNF_oid,	sub{[]},			'OC',			1,],
+						['MUST',			\&Parse_ABNF_oids,	sub{[]},			'MUST',			1,],
+						['MAY',				\&Parse_ABNF_oids,	sub{[]},			'MAY',			0,],
+						],
+				'ParseSpecial' => undef,
+				'Check_Parse' => undef,
+				'Check_ReferencedTypeTable' => [
+						#Field				Lookup			Type
+						['OC',				\&Lookup_nameoid,	'objectClasses',	],
+						['MUST',			\&Lookup_nameoid,	'attributeTypes',	],
+						['MAY',				\&Lookup_nameoid,	'attributeTypes',	],
+						],
+				'Check_Referenced' => \&Check_Referenced_NameForms,
+				'Inheritance' => undef,
+				'Check_Element' => undef,
+				},
+		);
+
+
+sub Parse_LDAP_RFC4512_Schema_Type
+	{
+	my ($key, $value, $parsetableref) = @_;
+
+	my $obj = {
+		'-Type' => $key,
+		};
+
+	if ($value !~ /^\((.*)\)\s*$/)
+		{
+		return undef;
+		}
+
+	$value = $1;
+
+	if (!defined($value = &{$parsetableref->{'ParseElementID'}->[0]}($obj, $parsetableref->{'ParseElementID'}->[1], $value)))
+		{
+		return undef;
+		}
+
+	if (!defined($value = TableParse($parsetableref->{'ParseTable'}, $obj, $value)))
+		{
+		return undef;
+		}
+
+	if (!defined($value = Parse_ABNF_extensions($obj, $value)))
+		{
+		return undef;
+		}
+
+	if ($value !~ /^\s*$/)
+		{
+		return undef;
+		}
+
+	if (defined $parsetableref->{'Check_Parse'})
+		{
+		$obj = $parsetableref->{'Check_Parse'}($obj);
+		}
+
+	return $obj;
+	}
+
+
+#######################################
+
+
+foreach my $key (keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	$SchemaElements{$key} = {};
+	$SchemaElements{$key}->{'Descriptions'} = [];
+	}
+
+
+while (@ARGV)
+	{
+	my $schemafile = shift @ARGV;
+	my ($item, $line);
+
+	open(my $fh, '<', $schemafile) || next;
+	while ((($item, $line) = unwrap($fh)) && $line)
+		{
+		if ($item !~ /^($RE_keystring)\s*:\s*(\S.*)$/)
+			{
+			next;
+			}
+
+		my ($attribute, $value) = ($1, $2);
+
+		if (exists($Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)}))
+			{
+			my $obj;
+			if (!defined($obj = Parse_LDAP_RFC4512_Schema_Type(
+					$attribute,
+					$value,
+					$Table_LDAP_RFC4512_Schema_Type_Parse{lc($attribute)},
+					)))
+				{
+				say "ERROR: '$attribute' declaration ignored due to parse error";
+				say "\tLine $line of '$schemafile'";
+				next;
+				}
+
+			$obj->{'-Defined'} = [$schemafile, $line];
+			push @{$SchemaElements{lc($attribute)}->{'Descriptions'}}, $obj;
+			}
+		else
+			{
+#			say $item;
+			}
+		}
+
+	close($fh);
+	}
+
+
+# Basic schema element checks.
+
+foreach my $key (sort keys %SchemaElements)
+	{
+	say scalar(@{$SchemaElements{$key}->{'Descriptions'}}), "\t'$key' elements declared";
+
+	$SchemaElements{$key}->{'Names'} = {};
+	$SchemaElements{$key}->{'RuleIds'} = {};
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (exists $element->{'-OID'})
+			{
+			my $oid = lc($element->{'-OID'});
+			$Oids{$oid} = [] if !exists $Oids{$oid};
+			push @{$Oids{$oid}}, $element;
+			}
+
+		if (exists $element->{'NAME'})
+			{
+			foreach my $name (@{$element->{'NAME'}})
+				{
+				my $lcname = lc($name);
+				$SchemaElements{$key}->{'Names'}->{$lcname} = [] if !exists $SchemaElements{$key}->{'Names'}->{$lcname};
+				push @{$SchemaElements{$key}->{'Names'}->{$lcname}}, $element;
+
+				$Names{$lcname} = {} if !exists $Names{$lcname};
+				$Names{$lcname}->{$key} = undef;
+				}
+			}
+
+		if (exists $element->{'-RULEID'})
+			{
+			$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}} = [] if !exists $SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}};
+			push @{$SchemaElements{$key}->{'RuleIds'}->{$element->{'-RULEID'}}}, $element;
+			}
+		}
+	}
+
+
+foreach my $oid (sort {CmpOids($a, $b)} keys %Oids)
+	{
+	next if scalar(@{$Oids{$oid}}) == 1;
+
+	say "ERROR: OID '$oid' declared multiple times:";
+	foreach my $element (@{$Oids{$oid}})
+		{
+		say "\t'", $element->{'-Type'},"'";
+		say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+		}
+	}
+
+
+foreach my $key (sort keys %SchemaElements)
+	{
+	foreach my $name (sort keys %{$SchemaElements{$key}->{'Names'}})
+		{
+		next if scalar(@{$SchemaElements{$key}->{'Names'}->{$name}}) == 1;
+
+		say "ERROR: Name '$name' declared multiple times:";
+		foreach my $element (@{$SchemaElements{$key}->{'Names'}->{$name}})
+			{
+			say "\t'", $element->{'-Type'},"'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+foreach my $key (sort keys %SchemaElements)
+	{
+	foreach my $ruleid (sort keys %{$SchemaElements{$key}->{'RuleIds'}})
+		{
+		next if scalar(@{$SchemaElements{$key}->{'RuleIds'}->{$ruleid}}) == 1;
+
+		say "ERROR: RuleID '$ruleid' declared multiple times:";
+		foreach my $element (@{$SchemaElements{$key}->{'RuleIds'}->{$ruleid}})
+			{
+			say "\t'", $element->{'-Type'},"'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+foreach my $name (sort keys %Names)
+	{
+	next if scalar(keys %{$Names{$name}}) == 1;
+
+	say "WARNING: Name '$name' declared as multiple schema element types:";
+	foreach my $key (sort keys %{$Names{$name}})
+		{
+		foreach my $element (@{$SchemaElements{$key}->{'Names'}->{$name}})
+			{
+			say "\t'", $element->{'-Type'}, "'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+# Basic referenced schema element type checks
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $refdtypetable = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_ReferencedTypeTable'};
+	next if !defined $refdtypetable;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		foreach my $fieldrefchecktable (@{$refdtypetable})
+			{
+			my ($field, $lookup, $type) = @{$fieldrefchecktable};
+			$type = $type;
+
+			next if !exists $element->{$field};
+
+			foreach my $ref (@{$element->{$field}})
+				{
+				my $targets = &{$lookup}($type, $ref);
+
+				if (!scalar(@{$targets}))
+					{
+					say "ERROR: Schema element of type '$type' not found referenced as '$ref':";
+					say "\t'", $element->{'-Type'}, "'";
+					say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+					next;
+					}
+
+				foreach my $target (@{&{$lookup}($type, $ref)})
+					{
+					if (lc($target->{'-Type'}) ne lc($type))
+						{
+						say "ERROR: Found schema element type of '$target->{'-Type'}' instead of expected type of '$type' when referenced as '$ref':";
+						say "\t'", $element->{'-Type'}, "'";
+						say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+						}
+					}
+				}
+			}
+		}
+	}
+
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $checker = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_Referenced'};
+	next if !defined $checker;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (!&$checker($element))
+			{
+			say "ERROR: Failed '$key' specific checks of referenced schema elements:";
+			say "\t'", $element->{'-Type'}, "'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+# Inheritance preparation
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		$element->{'-INH-DEPS'} = {};
+		$element->{'-INH-RDEPS'} = {};
+
+		if (defined $inheritspec->{'PrepTable'})
+			{
+			foreach my $row (@{$inheritspec->{'PrepTable'}})
+				{
+				my ($field, $initializer, @additional) = @{$row};
+
+				if (ref($initializer) eq 'CODE')
+					{
+					$element->{$field} = &{$initializer}(@additional);
+					}
+				else
+					{
+					$element->{$field} = $element->{$initializer};
+					}
+				}
+			}
+
+		if (defined $inheritspec->{'PrepSpecial'})
+			{
+			&{$inheritspec->{'PrepSpecial'}}($element);
+			}
+		}
+	}
+
+
+# Inheritance mark deps
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (defined $inheritspec->{'SourceTable'})
+			{
+			foreach my $source (@{$inheritspec->{'SourceTable'}})
+				{
+				my ($field, $lookup, $type) = @{$source};
+					{
+					next if !defined $element->{$field};
+
+					foreach my $dep (@{$element->{$field}})
+						{
+						foreach my $target (@{&{$lookup}($type, $dep)})
+							{
+							$element->{'-INH-DEPS'}->{$target} = $target;
+							$target->{'-INH-RDEPS'}->{$element} = $element;
+							}
+						}
+					}
+				}
+			}
+
+		if (defined $inheritspec->{'SourceSpecial'})
+			{
+			foreach my $target (&{$inheritspec->{'SourceSpecial'}}($element))
+				{
+				$element->{'-INH-DEPS'}->{$target} = $target;
+				$target->{'-INH-RDEPS'}->{$element} = $element;
+				}
+			}
+
+		$element->{'-INH-REMAIN'} = scalar(keys %{$element->{'-INH-DEPS'}});
+
+		if (!$element->{'-INH-REMAIN'})
+			{
+			push @InheritanceReady, $element;
+			}
+		}
+	}
+
+
+# Inheritance
+
+while (scalar @InheritanceReady)
+	{
+	my $element = shift @InheritanceReady;
+	my $key = lc($element->{'-Type'});
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+
+	if (defined $inheritspec->{'ActionTable'})
+		{
+		foreach my $row (@{$inheritspec->{'ActionTable'}})
+			{
+			my ($field, $source, $action, @additional) = @{$row};
+			my @inheritarray = ();
+
+			foreach my $dep (values %{$element->{'-INH-DEPS'}})
+				{
+				push @inheritarray, $dep->{$source};
+				}
+
+			$element->{$field} = &{$action}($element->{$source}, \@inheritarray, @additional);
+			}
+		}
+
+	if (defined $inheritspec->{'ActionSpecial'})
+		{
+		&{$inheritspec->{'ActionSpecial'}}($element, $element->{'-INH-DEPS'});
+		}
+
+	foreach my $rdep (values %{$element->{'-INH-RDEPS'}})
+		{
+		$rdep->{'-INH-REMAIN'}--;
+
+		if (!$rdep->{'-INH-REMAIN'})
+			{
+			push @InheritanceReady, $rdep;
+			}
+		}
+
+	if (defined $inheritspec->{'Check'})
+		{
+		&{$inheritspec->{'Check'}}($element);
+		}
+
+	delete $element->{'-INH-DEPS'};
+	delete $element->{'-INH-RDEPS'};
+	delete $element->{'-INH-REMAIN'};
+	}
+
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $inheritspec = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Inheritance'};
+	next if !defined $inheritspec;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		if (exists $element->{'-INH-DEPS'})
+			{
+			delete $element->{'-INH-DEPS'};
+			delete $element->{'-INH-RDEPS'};
+			delete $element->{'-INH-REMAIN'};
+
+			say "ERROR: Circular supertype dependancy:";
+			say "\t'", $element->{'-Type'}, "'";
+			say "\t\tLine: ", $element->{'-Defined'}->[1], " in file: '", $element->{'-Defined'}->[0], "'";
+			}
+		}
+	}
+
+
+# Final element checks
+
+foreach my $key (sort keys %Table_LDAP_RFC4512_Schema_Type_Parse)
+	{
+	my $checker = $Table_LDAP_RFC4512_Schema_Type_Parse{$key}->{'Check_Element'};
+	next if !defined $checker;
+
+	foreach my $element (@{$SchemaElements{$key}->{'Descriptions'}})
+		{
+		&$checker($element);
+		}
+	}
+
+
+__END__
+
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+say Dumper($var1, ...);
+say '';
+
+
+for my $name (sort {$a cmp $b} keys %names)
+	{
+	for my $item (@{$names{$name}})
+		{
+		next if $item->{'OID'} =~ /^\d.*\d$/;
+		say "'$name' ", $item->{'-Type'}, " ", ,$item->{'OID'};
+		}
+	}
+
+
+
+
+
+__END__
+
+attributetypes = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	SUP		=>	[],	# optional: undef	# oid
+	EQUALITY	=>	[],	# optional: undef	# oid
+	ORDERING	=>	[],	# optional: undef	# oid
+	SUBSTR		=>	[],	# optional: undef	# oid
+	-SYNTAXLEN	=>	[[]],	# optional: undef	# oid
+	SINGLE-VALUE	=>	bool,	# optional: false
+	COLLECTIVE	=>	bool,	# optional: false
+	RO		=>	bool,	# optional: false
+	USAGE		=>	$,	# optional: 'userApplications'
+	-DSYNTAX	=>	[],	# optional: []		# oid
+	-DLENMINMAX	=>	$,	# optional: undef	# number
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'attributetypes',
+
+	-EQUALITY	=>	[],	# declared or inherited value
+	-ORDERING	=>	[],	# declared or inherited value
+	-SUBSTR		=>	[],	# declared or inherited value
+	-SYNTAX		=>	[],	# declared or inherited value
+	-LENMINMAX	=>	$,	# declared or inherited value
+	-SUP-DEPTH	=>	$,	# max distance from root element
+
+	-TC-SUP		=>	[],	# oids from SUP chain
+
+	-INH-DEPS	=>	{},	# dependencies hashrefs
+	-INH-RDEPS	=>	{},	# reverse dependencies hashrefs
+	-INH-REMAIN	=>	$,	# dependencies remaining
+	);
+
+
+objectclasses = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef
+	OBSOLETE	=>	bool,	# optional: false
+	SUP		=>	[],	# optional: []		# oids
+	-ABSTRACT	=>	bool,	# optional: false
+	-STRUCTURAL	=>	bool,	# optional: false
+	-AUXILIARY	=>	bool,	# optional: false
+	MUST		=>	[],	# optional: []		# oids
+	MAY		=>	[],	# optional: []		# oids
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'objectclasses',
+
+	-SUP-DEPTH	=>	$,	# max distance from root element
+
+	-TC-SUP		=>	[],	# oids from SUP chains
+	-TC-MUST	=>	[],	# oids, transitive closure
+	-TC-MAY		=>	[],	# oids, transitive closure
+
+	-INH-DEPS	=>	{},	# dependencies hashrefs
+	-INH-RDEPS	=>	{},	# reverse dependencies hashrefs
+	-INH-REMAIN	=>	$,	# dependencies remaining
+	);
+
+
+matchingrules = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	SYNTAX		=>	[],	# required: []		# oid
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'matchingrules',
+	);
+
+
+matchingruleuse = (
+	-MROID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	APPLIES		=>	[],	# required: []		# oids
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'matchingruleuse',
+	);
+
+
+ldapsyntaxes = (
+	-OID		=>	$,	# required:		# oid
+	DESC		=>	$,	# optional: undef	# string
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ldapsyntaxes',
+	);
+
+
+ditcontentrules = (
+	-OCOID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	AUX		=>	[],	# optional: []		# oids
+	MUST		=>	[],	# optional: []		# oids
+	MAY		=>	[],	# optional: []		# oids
+	NOT		=>	[],	# optional: []		# oids
+	-X		=>	{[]},	# optional: []		# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ditcontentrules',
+	);
+
+
+ditstructurerules = (
+	-RULEID		=>	[],	# required:		# numbers
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	FORM		=>	[],	# required:		# oid
+	SUP		=>	[],	# optional: []		# ruleids
+	-X		=>	{[]},	# optional: {[]}	# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'ditstructurerules',
+	);
+
+
+nameforms = (
+	-OID		=>	$,	# required:		# oid
+	NAME		=>	[],	# optional: []		# strings
+	DESC		=>	$,	# optional: undef	# string
+	OBSOLETE	=>	bool,	# optional: false
+	OC		=>	[],	# required: []		# oid
+	MUST		=>	[],	# required: []		# oids
+	MAY		=>	[],	# optional: []		# oids
+	-X		=>	{[]},	# optional: {[]}	# hashrefs
+	-Defined	=>	[],	# schema file & line declared
+	-Type		=>	'nameforms',
+	);
+
