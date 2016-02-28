@@ -42,7 +42,140 @@ use warnings;
 
 
 # Settings
-my $RelaxedTypeOid = 1;
+my $RelaxedTypeOid = 0;
+
+
+package rsbx::rfc2849::unwrap
+	{
+	my @optionKeys =
+			(
+			'RE_Empty',
+			'RE_Start',
+			'RE_Continue',
+			'InputTransform',
+			);
+
+
+	sub _NullTransform
+		{
+		my ($line, $lineno) = @_;
+
+		return ($line, $lineno);
+		}
+
+
+	sub New
+		{
+		my ($package, $fh, %options) = @_;
+
+		$package = ref($package) || $package;
+
+		my $self =
+			{
+			'Accumulator'		=> undef,
+			'FileHandle'		=> $fh,
+			'InputLineNumber'	=> 0,
+			'OutputLineNumber'	=> undef,
+			'OutputQueue'		=> [],
+			'EOF'			=> undef,
+			'RE_Empty'		=> '^()$',
+			'RE_Start'		=> '^([^ ].*)$',
+			'RE_Continue'		=> '^ (.*)$',
+			'InputTransform'	=> [\&_NullTransform, ],
+			};
+
+		foreach my $key (@optionKeys)
+			{
+			if (defined $options{$key})
+				{
+				$self->{$key} = $options{$key};
+				}
+			}
+
+		return bless $self, $package;
+		}
+
+
+	sub GetLine
+		{
+		my ($self) = @_;
+
+		if (scalar(@{$self->{'OutputQueue'}}))		# Queued
+			{
+			return (@{shift @{$self->{'OutputQueue'}}}, 1);
+			}
+
+		if ($self->{'EOF'})				# EOF
+			{
+			return (undef, undef, 1);
+			}
+
+		my $fh = $self->{'FileHandle'};
+		my $RE_Empty = $self->{'RE_Empty'};
+		my $RE_Start = $self->{'RE_Start'};
+		my $RE_Continue = $self->{'RE_Continue'};
+		my @TransformArray = @{$self->{'InputTransform'}};
+		my $TransformFunc = shift @TransformArray;
+
+		while (<$fh>)
+			{
+			chomp;
+			$self->{'InputLineNumber'}++;
+			my ($linein, $lineno) = &{$TransformFunc}($_, $self->{'InputLineNumber'}, @TransformArray);
+
+			if (defined $self->{'Accumulator'})	# Collecting
+				{
+				if ($linein =~ /$RE_Start/)		# Start
+					{
+					my ($tl, $tn) = ($self->{'Accumulator'}, $self->{'OutputLineNumber'});
+					($self->{'Accumulator'}, $self->{'OutputLineNumber'}) = ($1, $lineno);
+					return ($tl, $tn, 1);
+					}
+				elsif ($linein =~ /$RE_Continue/)	# Continue
+					{
+					$self->{'Accumulator'} .= $1;
+					}
+				elsif ($linein =~ /$RE_Empty/)		# Empty
+					{
+					push @{$self->{'OutputQueue'}}, [$1, $lineno];
+
+					my ($tl, $tn) = ($self->{'Accumulator'}, $self->{'OutputLineNumber'});
+					($self->{'Accumulator'}, $self->{'OutputLineNumber'}) = (undef, undef);
+					return ($tl, $tn, 1);
+					}
+				else					# Other
+					{
+					return ($linein, $lineno, 0);
+					}
+				}
+			else					# Idle
+				{
+				if ($linein =~ /$RE_Start/)		# Start
+					{
+					($self->{'Accumulator'}, $self->{'OutputLineNumber'}) = ($1, $lineno);
+					}
+				elsif ($linein =~ /$RE_Continue/)	# Continue
+					{
+					return ($linein, $lineno, 0);
+					}
+				elsif ($linein =~ /$RE_Empty/)		# Empty
+					{
+					return ($1, $lineno, 1);
+					}
+				else					# Other
+					{
+					return ($linein, $lineno, 0);
+					}
+				}
+			}
+
+		$self->{'EOF'} = 1;
+
+		my ($tl, $tn) = ($self->{'Accumulator'}, $self->{'OutputLineNumber'});
+		($self->{'Accumulator'}, $self->{'OutputLineNumber'}) = (undef, undef);
+		return ($tl, $tn, 1);
+		}
+	}
 
 
 # Constants
@@ -60,58 +193,6 @@ my %SchemaElements = ();
 my %Oids = ();
 my %Names = ();
 my @InheritanceReady = ();
-
-my $unwrap_state = undef;
-my $unwrap_state_line = 0;
-my $unwrap_curr_line = 0;
-my $unwrap_fh = '';
-
-sub unwrap
-	{
-	my $th = shift;
-
-	if ($th ne $unwrap_fh)
-		{
-		if (defined $unwrap_state)
-			{
-			my $r = $unwrap_state;
-			$unwrap_state = undef;
-			return ($r, $unwrap_state_line);
-			}
-
-		$unwrap_fh = $th;
-		$unwrap_curr_line = 0;
-		}
-
-	while (<$th>)
-		{
-		chomp;
-		$unwrap_curr_line++;
-
-		if ($_ !~ /^ / && defined $unwrap_state)
-			{
-			my ($r, $l) = ($unwrap_state, $unwrap_state_line);
-			($unwrap_state, $unwrap_state_line) =
-					($_, $unwrap_curr_line);
-			return ($r, $l);
-			}
-
-		if ($_ !~ /^ /)
-			{
-			$unwrap_state = $_;
-			$unwrap_state_line = $unwrap_curr_line;
-			}
-		else
-			{
-			$unwrap_state .= substr($_, 1);
-			}
-		}
-
-	my ($r, $l) = ($unwrap_state, $unwrap_state_line);
-	$unwrap_state = undef;
-	$unwrap_state_line = 0;
-	return ($r, $l);
-	}
 
 
 #######################################
@@ -1099,11 +1180,14 @@ foreach my $key (keys %Table_LDAP_RFC4512_Schema_Type_Parse)
 while (@ARGV)
 	{
 	my $schemafile = shift @ARGV;
-	my ($item, $line);
+	my ($item, $line, $valid);
 
 	open(my $fh, '<', $schemafile) || next;
-	while ((($item, $line) = unwrap($fh)) && $line)
+	my $input = rsbx::rfc2849::unwrap->New($fh) || die;
+	while ((($item, $line, $valid) = $input->GetLine()) && defined($item))
 		{
+		next if !$valid || $item eq '';
+
 		if ($item !~ /^($RE_keystring)\s*:\s*(\S.*)$/)
 			{
 			next;
