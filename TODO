@@ -6,3 +6,5 @@ General code cleanup.
 
 Additional and/or updated RFC schema files.
 
+Produce better diagnostics on parse failures.
+
